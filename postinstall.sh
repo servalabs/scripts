@@ -157,8 +157,7 @@ module_system_update() {
         cockpit \
         ssh \
         tree \
-        wget \
-        curl
+        wget
     
     # Upgrade installed packages
     log_info "Upgrading installed packages..."
