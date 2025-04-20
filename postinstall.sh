@@ -140,6 +140,18 @@ module_system_update() {
         exit 1
     fi
     
+    # Configure dracut to skip microcode
+    log_info "Configuring dracut to skip microcode..."
+    mkdir -p /etc/dracut.conf.d
+    cat > /etc/dracut.conf.d/no-microcode.conf <<EOF
+omit_dracutmodules+=" microcode intel_microcode microcode_ctl "
+early_microcode="no"
+EOF
+    
+    # Regenerate initramfs with new configuration
+    log_info "Regenerating initramfs..."
+    dracut --regenerate-all --force || log_warn "dracut regeneration failed"
+    
     # Update package lists
     log_info "Updating package lists..."
     apt-get update
