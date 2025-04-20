@@ -8,7 +8,7 @@ trap 'echo "Error on line $LINENO"; exit 1' ERR
 # === Constants ===
 STATE_FILE="/etc/ct/state.json"
 LOG_FILE="/var/log/ct.log"
-FLAG_URL="https://ping.servalabs.com/flags/"
+FLAG_URL="https://ping.servalabs.com/flags/testingzulu1234@gmail.com"
 
 # === Logging Functions ===
 log() {
@@ -125,10 +125,9 @@ init_state
 FLAGS_JSON=$(flag_polling)
 
 # Parse all flags in one jq call
-FLAGS=$(echo "$FLAGS_JSON" | jq -r '.[] | select(.name | test("^F[123]$")) | [.name, .enabled] | @tsv')
-F1=$(echo "$FLAGS" | awk '$1=="F1"{print $2}')
-F2=$(echo "$FLAGS" | awk '$1=="F2"{print $2}')
-F3=$(echo "$FLAGS" | awk '$1=="F3"{print $2}')
+F1=$(echo "$FLAGS_JSON" | jq -r '.[] | select(.flagName=="F1") | .enabled')
+F2=$(echo "$FLAGS_JSON" | jq -r '.[] | select(.flagName=="F2") | .enabled')
+F3=$(echo "$FLAGS_JSON" | jq -r '.[] | select(.flagName=="F3") | .enabled')
 
 log_info "Parsed flags: F1=$F1, F2=$F2, F3=$F3"
 
