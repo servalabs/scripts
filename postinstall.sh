@@ -331,12 +331,11 @@ module_configure_cockpit() {
     cat > "${COCKPIT_CONF}" <<EOF
 [WebService]
 LoginTitle=Atom Admin Panel
-Origins=https://*.example.com wss://*.example.com
 ProtocolHeader = X-Forwarded-Proto
 AllowUnencrypted=true
 
 [Session]
-IdleTimeout=15
+IdleTimeout=30
 EOF
     
     # Download branding assets
