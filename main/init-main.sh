@@ -55,7 +55,11 @@ Type=oneshot
 ExecStart=${CT_MANAGER_SCRIPT}
 StandardOutput=append:/var/log/ct.log
 StandardError=append:/var/log/ct.err.log
-TimeoutSec=300
+TimeoutSec=60
+TimeoutStartSec=30
+TimeoutStopSec=30
+Restart=no
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -73,31 +77,13 @@ After=network-online.target
 [Timer]
 OnBootSec=15sec
 OnUnitActiveSec=30sec
+PersistenceSec=30
+RefuseManualStart=yes
 Unit=ct_manager.service
 
 [Install]
 WantedBy=timers.target
 EOF
-}
-
-# Create watchdog service file
-create_watchdog_file() {
-    log_info "Creating watchdog service file..."
-    local watchdog_service="/etc/systemd/system/ct_manager-watchdog.service"
-    cat <<EOF | tee "$watchdog_service" > /dev/null
-[Unit]
-Description=CT Manager Timer Watchdog
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'if ! systemctl is-active --quiet ct_manager.timer; then systemctl start ct_manager.timer; fi'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    chmod 644 "$watchdog_service"
 }
 
 # Fetch and install ct_manager.sh
@@ -131,9 +117,6 @@ setup_services() {
     log_info "Enabling and starting ct_manager.timer..."
     systemctl enable --now ct_manager.timer
 
-    log_info "Enabling and starting ct_manager-watchdog.service..."
-    systemctl enable --now ct_manager-watchdog.service
-
     # Verify timer is active
     if ! systemctl is-active --quiet ct_manager.timer; then
         log_error "Failed to start ct_manager.timer"
@@ -150,7 +133,6 @@ log_info "Starting CT Manager initialization..."
 create_directories
 create_service_file
 create_timer_file
-create_watchdog_file
 fetch_manager_script
 init_state_file
 setup_services

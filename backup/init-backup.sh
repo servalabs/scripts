@@ -94,7 +94,13 @@ Requires=network-online.target
 [Service]
 Type=oneshot
 ExecStart=$INSTALL_DIR/$SCRIPT_NAME
-TimeoutSec=300
+StandardOutput=append:/var/log/ct.log
+StandardError=append:/var/log/ct.err.log
+TimeoutSec=60
+TimeoutStartSec=30
+TimeoutStopSec=30
+Restart=no
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -109,38 +115,23 @@ After=network-online.target
 [Timer]
 OnBootSec=15sec
 OnUnitActiveSec=30sec
+PersistenceSec=30
+RefuseManualStart=yes
 Unit=$SERVICE_NAME.service
 
 [Install]
 WantedBy=timers.target
 EOF
 
-    # Create watchdog service to ensure timer is running
-    cat <<EOF > "/etc/systemd/system/${SERVICE_NAME}-watchdog.service"
-[Unit]
-Description=CT Backup Manager Timer Watchdog
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'if ! systemctl is-active --quiet ${SERVICE_NAME}.timer; then systemctl start ${SERVICE_NAME}.timer; fi'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
     # Set permissions
     chmod 644 "/etc/systemd/system/$SERVICE_NAME.service"
     chmod 644 "/etc/systemd/system/$SERVICE_NAME.timer"
-    chmod 644 "/etc/systemd/system/${SERVICE_NAME}-watchdog.service"
 
     # Reload and enable
     systemctl daemon-reload
     systemctl enable --now "$SERVICE_NAME.timer"
-    systemctl enable --now "${SERVICE_NAME}-watchdog.service"
     
-    log_info "Service, timer, and watchdog installed and enabled"
+    log_info "Service and timer installed and enabled"
 }
 
 # === Main Execution ===
