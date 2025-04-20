@@ -61,28 +61,11 @@ stop_and_disable_services() {
 # Function to handle sensitive files
 handle_sensitive_files() {
     if [ -d "$SENSITIVE_DIR" ]; then
-        # Create temp directory
-        mkdir -p "$TEMP_DIR"
-        
-        # Move all files except .stfolder to temp location
-        if ! find "$SENSITIVE_DIR" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -exec mv {} "$TEMP_DIR/" \; 2>/dev/null; then
-            log_error "Failed to move files to temp location"
-            return 1
-        fi
-        
-        # Use faster shred options and parallel processing
-        if command -v parallel >/dev/null 2>&1; then
-            find "$TEMP_DIR" -type f | parallel -j 0 shred -u -n 1 -z {} 2>/dev/null
-        else
-            # Fallback to background processes with faster shred options
-            find "$TEMP_DIR" -type f -exec shred -u -n 1 -z {} \& 2>/dev/null
-            wait
-        fi
-
-        # Remove temp directory
-        rm -rf "$TEMP_DIR"
-        
-        log_info "Successfully removed all sensitive directory contents"
+        # Securely erase all files except .stfolder
+        find "$SENSITIVE_DIR" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type f -exec shred -u -n 1 -z {} \;
+        # Remove any remaining directories (except .stfolder)
+        find "$SENSITIVE_DIR" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type d -exec rm -rf {} \;
+        log_info "Successfully securely erased all contents while preserving .stfolder"
     else
         log_info "Target directory $SENSITIVE_DIR does not exist"
     fi
