@@ -20,15 +20,17 @@ INSTALL_MARKER="/var/lib/atomos/install_marker"
 GITHUB_REPO="servalabs/scripts"
 GITHUB_BRANCH="main"
 
+# Create log directory immediately
+mkdir -p "${LOG_DIR}"
+touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
+chmod 640 "${LOG_FILE}" "${ERROR_LOG_FILE}"
+
 # ============================
 # === Utility Functions ===
 # ============================
 
 # Initialize logging system
 setup_logging() {
-    mkdir -p "${LOG_DIR}"
-    touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
-    chmod 640 "${LOG_FILE}" "${ERROR_LOG_FILE}"
     exec > >(tee -a "${LOG_FILE}") 2> >(tee -a "${ERROR_LOG_FILE}" >&2)
     
     log_info "====== AtomOS Installation Started: $(date) ======"
@@ -420,11 +422,7 @@ module_install_cloudflared() {
     mark_operation "install_cloudflared"
 }
 
-# ============================
-# === Node-Specific Modules ===
-# ============================
-
-# Install CasaOS for main node
+# Install CasaOS
 module_install_casaos() {
     if ! check_operation "install_casaos"; then
         return 0
@@ -444,6 +442,10 @@ module_install_casaos() {
     
     mark_operation "install_casaos"
 }
+
+# ============================
+# === Node-Specific Modules ===
+# ============================
 
 # Initialize main node control system
 module_init_main_control() {
@@ -648,11 +650,11 @@ EOF
     module_configure_security
     module_configure_cockpit
     module_install_cloudflared
+    module_install_casaos
     
     # Run node-specific modules
     if [[ "${is_main_server}" =~ ^[Yy]$ ]]; then
         log_info "Running main server specific modules..."
-        module_install_casaos
         
         if [[ "${run_init}" =~ ^[Yy]$ ]]; then
             module_init_main_control
