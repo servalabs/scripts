@@ -584,11 +584,6 @@ EOF
     log_info "Updating system with new configuration..."
     systemctl daemon-reexec
     
-    # Update kernel if possible
-    if command -v kernel-install > /dev/null; then
-        kernel-install add "$(uname -r)" /lib/modules/"$(uname -r)"/vmlinuz || log_warn "kernel-install failed"
-    fi
-    
     # Update bootloader if systemd-boot is used
     if command -v bootctl > /dev/null; then
         bootctl update || log_warn "bootctl update failed"
@@ -654,21 +649,11 @@ EOF
     
     # Run node-specific modules
     if [[ "${is_main_server}" =~ ^[Yy]$ ]]; then
-        log_info "Running main server specific modules..."
-        
-        if [[ "${run_init}" =~ ^[Yy]$ ]]; then
-            module_init_main_control
-        else
-            log_info "Skipped main initialization script"
-        fi
+        log_info "Running main server initialization..."
+        [[ "${run_init}" =~ ^[Yy]$ ]] && module_init_main_control
     else
-        log_info "Running backup server specific modules..."
-        
-        if [[ "${run_init}" =~ ^[Yy]$ ]]; then
-            module_init_backup_control
-        else
-            log_info "Skipped backup initialization script"
-        fi
+        log_info "Running backup server initialization..."
+        [[ "${run_init}" =~ ^[Yy]$ ]] && module_init_backup_control
     fi
     
     # Run lockdown module if requested
