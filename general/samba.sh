@@ -96,11 +96,6 @@ fi
 usermod -aG docker "$smb_user"
 echo "🐳 Added '$smb_user' to necessary group."
 
-# Set directory ownership and permissions.
-chown -R "$smb_user:$smb_user" "$samba_dir"
-chmod -R 770 "$samba_dir"
-echo "🔒 Updated ownership and permissions for $samba_dir."
-
 # Update the Samba users mapping.
 if [ ! -f "$smbusers_file" ]; then
   touch "$smbusers_file"
