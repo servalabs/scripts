@@ -104,7 +104,7 @@ After=network-online.target
 [Timer]
 OnBootSec=15sec
 OnUnitActiveSec=30sec
-Persistence=true
+Persistent=true
 Unit=ct_backup_manager.service
 
 [Install]

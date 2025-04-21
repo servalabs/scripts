@@ -94,8 +94,7 @@ After=network-online.target
 [Timer]
 OnBootSec=15sec
 OnUnitActiveSec=30sec
-Persistence=true
-RefuseManualStart=yes
+Persistent=true
 Unit=ct_manager.service
 
 [Install]
