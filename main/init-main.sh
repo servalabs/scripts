@@ -1,22 +1,23 @@
 #!/bin/bash
 
 # init-main.sh - CT Manager Service Initialization Script
-# Version: 3.1
+# Version: 3.2
 
 set -euo pipefail
 trap 'echo "Error on line $LINENO"; exit 1' ERR
 
-# Constants
+# === Constants ===
 LOG_FILE="/var/log/ct-init.log"
+ERR_LOG_FILE="/var/log/ct-init.err.log"
 CT_DIR="/etc/ct"
 CT_BIN="/usr/local/bin"
+CT_MANAGER_SCRIPT="/usr/local/bin/ct_manager.sh"
 CT_MANAGER_SERVICE="/etc/systemd/system/ct_manager.service"
 CT_MANAGER_TIMER="/etc/systemd/system/ct_manager.timer"
-CT_MANAGER_SCRIPT="${CT_BIN}/ct_manager.sh"
-STATE_FILE="${CT_DIR}/state.json"
+STATE_FILE="/etc/ct/state.json"
 SCRIPT_URL="https://github.com/servalabs/scripts/raw/refs/heads/main/main/ct_manager.sh"
 
-# Logging functions
+# === Logging Functions ===
 log() {
     local level="$1"
     shift
@@ -24,10 +25,9 @@ log() {
 }
 
 log_info() { log "INFO" "$@"; }
-log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
 
-# Ensure script is run as root
+# === Check Root ===
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         log_error "Please run as root"
@@ -35,16 +35,31 @@ check_root() {
     fi
 }
 
-# Create required directories
+# === Directory Setup ===
 create_directories() {
-    log_info "Creating required directories..."
+    log_info "Creating directories..."
     mkdir -p "$CT_DIR" "$CT_BIN"
+    touch "$LOG_FILE" "$ERR_LOG_FILE"
+    chmod 755 "$CT_BIN" "$CT_DIR"
+    chmod 664 "$LOG_FILE" "$ERR_LOG_FILE"
 }
 
-# Create systemd service file
+# === Download Script ===
+fetch_manager_script() {
+    log_info "Fetching ct_manager.sh from GitHub..."
+    if curl -fsSL -o "$CT_MANAGER_SCRIPT" "$SCRIPT_URL"; then
+        chmod +x "$CT_MANAGER_SCRIPT"
+        log_info "Downloaded and installed at $CT_MANAGER_SCRIPT"
+    else
+        log_error "Failed to download script"
+        exit 1
+    fi
+}
+
+# === Create Service ===
 create_service_file() {
-    log_info "Creating systemd service file ${CT_MANAGER_SERVICE}..."
-    cat <<EOF | tee "$CT_MANAGER_SERVICE" > /dev/null
+    log_info "Creating systemd service file..."
+    cat > "$CT_MANAGER_SERVICE" <<EOF
 [Unit]
 Description=CT Manager Service
 After=network-online.target
@@ -52,9 +67,9 @@ Requires=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=${CT_MANAGER_SCRIPT}
-StandardOutput=append:/var/log/ct.log
-StandardError=append:/var/log/ct.err.log
+ExecStart=/usr/local/bin/ct_manager.sh
+StandardOutput=append:/var/log/ct-init.log
+StandardError=append:/var/log/ct-init.err.log
 TimeoutSec=60
 TimeoutStartSec=30
 TimeoutStopSec=30
@@ -64,77 +79,69 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    chmod 644 "$CT_MANAGER_SERVICE"
 }
 
-# Create systemd timer file
+# === Create Timer ===
 create_timer_file() {
-    log_info "Creating systemd timer file ${CT_MANAGER_TIMER}..."
-    cat <<EOF | tee "$CT_MANAGER_TIMER" > /dev/null
+    log_info "Creating systemd timer file..."
+    cat > "$CT_MANAGER_TIMER" <<EOF
 [Unit]
-Description=Runs CT Manager every 30 Seconds
+Description=Runs CT Manager every 30 seconds
 After=network-online.target
 
 [Timer]
 OnBootSec=15sec
 OnUnitActiveSec=30sec
-PersistenceSec=30
+Persistence=true
 RefuseManualStart=yes
 Unit=ct_manager.service
 
 [Install]
 WantedBy=timers.target
 EOF
+
+    chmod 644 "$CT_MANAGER_TIMER"
 }
 
-# Fetch and install ct_manager.sh
-fetch_manager_script() {
-    log_info "Fetching ct_manager.sh from GitHub..."
-    if ! curl -fsSL -o "$CT_MANAGER_SCRIPT" "$SCRIPT_URL"; then
-        log_error "Failed to download ct_manager.sh"
-        exit 1
-    fi
-    
-    log_info "Setting executable permissions on ${CT_MANAGER_SCRIPT}..."
-    chmod +x "$CT_MANAGER_SCRIPT"
-}
-
-# Initialize state file
+# === Init State File ===
 init_state_file() {
-    log_info "Initializing state file ${STATE_FILE} if not present..."
+    log_info "Checking for state file..."
     if [ ! -f "$STATE_FILE" ]; then
-        echo '{"deleted_flag": "no", "last_transition": ""}' | tee "$STATE_FILE" > /dev/null
-        log_info "State file created successfully"
+        echo '{"deleted_flag": "no", "last_transition": ""}' > "$STATE_FILE"
+        chmod 644 "$STATE_FILE"
+        log_info "State file initialized at $STATE_FILE"
     else
         log_info "State file already exists"
     fi
 }
 
-# Reload and enable services
+# === Enable & Start Timer ===
 setup_services() {
-    log_info "Reloading systemd daemon..."
+    log_info "Reloading systemd and enabling services..."
     systemctl daemon-reload
-
-    log_info "Enabling and starting ct_manager.timer..."
     systemctl enable --now ct_manager.timer
 
-    # Verify timer is active
-    if ! systemctl is-active --quiet ct_manager.timer; then
-        log_error "Failed to start ct_manager.timer"
+    if systemctl is-active --quiet ct_manager.timer; then
+        log_info "CT Manager timer is active"
+    else
+        log_error "Failed to activate CT Manager timer"
         exit 1
     fi
-    log_info "CT Manager timer is active"
 }
 
-# Main execution
-check_root
-log_info "Starting CT Manager initialization..."
+# === Main Execution ===
+main() {
+    check_root
+    log_info "Starting CT Manager setup..."
+    create_directories
+    fetch_manager_script
+    create_service_file
+    create_timer_file
+    init_state_file
+    setup_services
+    log_info "CT Manager setup completed successfully."
+}
 
-# Run initialization steps
-create_directories
-create_service_file
-create_timer_file
-fetch_manager_script
-init_state_file
-setup_services
-
-log_info "CT Manager initialization completed successfully."
+main
