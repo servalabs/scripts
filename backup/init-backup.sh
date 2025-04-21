@@ -116,7 +116,6 @@ After=network-online.target
 OnBootSec=15sec
 OnUnitActiveSec=30sec
 PersistenceSec=30
-RefuseManualStart=yes
 Unit=$SERVICE_NAME.service
 
 [Install]
