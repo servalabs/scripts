@@ -346,6 +346,12 @@ main_restore() {
         manage_service "${service}" "enable" ""
     done
     
+    # Check if services started successfully
+    if ! services_running; then
+        log_warn "Some services failed to start, attempting retry"
+        retry_operation "restore"
+    fi
+    
     log_success "Restore operation completed for main node"
 }
 
