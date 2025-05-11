@@ -12,4 +12,7 @@ Thumbs.db
 *.tmp
 *.temp 
 
+# IDE settings
+.vscode/
+
 #
