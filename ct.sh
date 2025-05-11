@@ -1,6 +1,6 @@
 #!/bin/bash
 # ct.sh - Consolidated Contingency System Manager
-# Version: 1.0.0
+# Version: 1.0.1
 # This script consolidates all functions for the CT system:
 # - Monitoring for flags and executing appropriate actions
 # - Self-updating from GitHub repository
@@ -23,10 +23,33 @@ SENSITIVE_DIR="/files/20 Docs"
 SCRIPT_URL="https://raw.githubusercontent.com/servalabs/scripts/main/ct.sh"
 SCRIPT_PATH="$0"
 CURRENT_VERSION="1.0.0"
+LOCK_FILE="${CT_DIR}/.lock"
 
 # Ensure log files exist
 touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
 chmod 644 "${LOG_FILE}" "${ERROR_LOG_FILE}"
+
+# ============================
+# === Lock Management ===
+# ============================
+acquire_lock() {
+    local lockfile="$1"
+    local timeout=300  # 5 minutes timeout
+    local start_time=$(date +%s)
+    
+    while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+        if mkdir "$lockfile" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+release_lock() {
+    local lockfile="$1"
+    rmdir "$lockfile" 2>/dev/null || true
+}
 
 # ============================
 # === Logging Functions ===
@@ -56,22 +79,37 @@ get_node_type() {
     fi
 }
 
-# Update a field in the state JSON file
+# Update a field in the state JSON file with locking
 update_state() {
     local key="$1"
     local value="$2"
+    
+    if ! acquire_lock "${LOCK_FILE}"; then
+        log_error "Failed to acquire lock for state update"
+        return 1
+    fi
+    
     if jq --arg key "$key" --arg value "$value" '.[$key]=$value' "${STATE_FILE}" > "${STATE_FILE}.tmp"; then
         mv "${STATE_FILE}.tmp" "${STATE_FILE}"
         log_info "State updated: ${key} set to ${value}"
     else
         log_error "Failed to update state for key ${key}"
+        release_lock "${LOCK_FILE}"
         return 1
     fi
+    
+    release_lock "${LOCK_FILE}"
+    return 0
 }
 
 # Initialize the state file if it doesn't exist
 init_state() {
     local node_type=$(get_node_type)
+    
+    if ! acquire_lock "${LOCK_FILE}"; then
+        log_error "Failed to acquire lock for state initialization"
+        return 1
+    fi
     
     if [ ! -f "${STATE_FILE}" ]; then
         if [ "${node_type}" == "main" ]; then
@@ -92,18 +130,31 @@ init_state() {
             log_info "System startup time recorded: ${system_startup}"
         fi
     fi
+    
+    release_lock "${LOCK_FILE}"
 }
 
-# Retrieve the flags from the remote dashboard
+# Retrieve the flags from the remote dashboard with retry
 fetch_flags() {
-    local flags=""
-    flags=$(timeout 5 curl -fsSL "${FLAG_URL}")
-    if [ $? -ne 0 ] || [ -z "${flags}" ]; then
-        log_error "Failed to retrieve flags from ${FLAG_URL}"
-        return 1
-    fi
-    log_info "Flags retrieved successfully"
-    echo "${flags}"
+    local max_retries=3
+    local retry_count=0
+    local backoff=1
+    
+    while [ $retry_count -lt $max_retries ]; do
+        local flags=$(timeout 10 curl -fsSL "${FLAG_URL}")
+        if [ $? -eq 0 ] && [ -n "${flags}" ]; then
+            log_info "Flags retrieved successfully"
+            echo "${flags}"
+            return 0
+        fi
+        
+        retry_count=$((retry_count + 1))
+        sleep $backoff
+        backoff=$((backoff * 2))
+    done
+    
+    log_error "Failed to retrieve flags after ${max_retries} attempts"
+    return 1
 }
 
 # Parse flags from the JSON response
@@ -126,11 +177,13 @@ parse_flags() {
 # === Service Management Functions ===
 # ============================
 
-# Manage a service (start, stop, enable, disable)
+# Manage a service with proper state verification
 manage_service() {
     local service="$1"
     local action="$2"
     local state_key="$3"
+    local timeout=30
+    local start_time=$(date +%s)
     
     log_info "Managing service ${service}: ${action}"
     
@@ -138,8 +191,18 @@ manage_service() {
         "start")
             if ! systemctl is-active --quiet "${service}"; then
                 systemctl start "${service}" 2>/dev/null || true
-                [ -n "${state_key}" ] && update_state "${state_key}" "on"
-                log_info "${service} started successfully"
+                
+                # Wait for service to be active
+                while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+                    if systemctl is-active --quiet "${service}"; then
+                        [ -n "${state_key}" ] && update_state "${state_key}" "on"
+                        log_info "${service} started successfully"
+                        return 0
+                    fi
+                    sleep 1
+                done
+                log_error "${service} failed to start within ${timeout} seconds"
+                return 1
             else
                 log_info "${service} is already running"
             fi
@@ -148,8 +211,18 @@ manage_service() {
             if systemctl is-active --quiet "${service}"; then
                 systemctl stop "${service}" 2>/dev/null || \
                 (systemctl kill -s SIGKILL "${service}" 2>/dev/null && systemctl stop "${service}" 2>/dev/null)
-                [ -n "${state_key}" ] && update_state "${state_key}" "off"
-                log_info "${service} stopped successfully"
+                
+                # Wait for service to be inactive
+                while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+                    if ! systemctl is-active --quiet "${service}"; then
+                        [ -n "${state_key}" ] && update_state "${state_key}" "off"
+                        log_info "${service} stopped successfully"
+                        return 0
+                    fi
+                    sleep 1
+                done
+                log_error "${service} failed to stop within ${timeout} seconds"
+                return 1
             else
                 log_info "${service} is already stopped"
             fi
@@ -157,8 +230,18 @@ manage_service() {
         "enable")
             if ! systemctl is-enabled --quiet "${service}"; then
                 systemctl enable --now "${service}" 2>/dev/null || true
-                [ -n "${state_key}" ] && update_state "${state_key}" "on"
-                log_info "${service} enabled and started"
+                
+                # Wait for service to be active
+                while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+                    if systemctl is-active --quiet "${service}"; then
+                        [ -n "${state_key}" ] && update_state "${state_key}" "on"
+                        log_info "${service} enabled and started"
+                        return 0
+                    fi
+                    sleep 1
+                done
+                log_error "${service} failed to start within ${timeout} seconds"
+                return 1
             else
                 log_info "${service} is already enabled"
             fi
@@ -168,8 +251,18 @@ manage_service() {
                 systemctl stop "${service}" 2>/dev/null || \
                 (systemctl kill -s SIGKILL "${service}" 2>/dev/null && systemctl stop "${service}" 2>/dev/null)
                 systemctl disable "${service}" 2>/dev/null || true
-                [ -n "${state_key}" ] && update_state "${state_key}" "off"
-                log_info "${service} disabled and stopped"
+                
+                # Wait for service to be inactive
+                while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+                    if ! systemctl is-active --quiet "${service}"; then
+                        [ -n "${state_key}" ] && update_state "${state_key}" "off"
+                        log_info "${service} disabled and stopped"
+                        return 0
+                    fi
+                    sleep 1
+                done
+                log_error "${service} failed to stop within ${timeout} seconds"
+                return 1
             else
                 log_info "${service} is already disabled"
             fi
@@ -177,23 +270,26 @@ manage_service() {
     esac
 }
 
-# Check if services are running
+# Check if services are running with proper verification
 services_running() {
     local services=("tailscaled" "syncthing" "cloudflared" "cockpit" "cockpit.socket" "casaos-gateway")
+    local all_running=true
+    
     for service in "${services[@]}"; do
-        if systemctl is-active --quiet "$service"; then
-            log_info "Service $service is still running"
-            return 0  # At least one service is running
+        if ! systemctl is-active --quiet "$service"; then
+            log_info "Service $service is not running"
+            all_running=false
         fi
     done
-    return 1  # No services are running
+    
+    $all_running
 }
 
 # ============================
 # === File Management Functions ===
 # ============================
 
-# Check if sensitive files exist
+# Check if sensitive files exist with proper error handling
 sensitive_files_exist() {
     if [ ! -d "${SENSITIVE_DIR}" ]; then
         log_info "No sensitive directory found at ${SENSITIVE_DIR}"
@@ -228,11 +324,12 @@ sensitive_files_exist() {
 # === Operation Functions ===
 # ============================
 
-# Simple retry mechanism for failed operations
+# Simple retry mechanism for failed operations with exponential backoff
 retry_operation() {
     local operation="$1"
     local max_retries=3
     local retry_count=0
+    local backoff=1
     
     while [ $retry_count -lt $max_retries ]; do
         log_info "Retrying $operation (attempt $((retry_count + 1))/$max_retries)"
@@ -252,8 +349,9 @@ retry_operation() {
                 ;;
         esac
         
-        # Wait a moment before checking
-        sleep 5
+        # Wait with exponential backoff
+        sleep $backoff
+        backoff=$((backoff * 2))
         
         # Check if services are in expected state
         if [ "$operation" = "destroy" ] && ! services_running; then
