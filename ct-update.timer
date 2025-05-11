@@ -1,0 +1,12 @@
+[Unit]
+Description=Run CT Script Update daily
+After=network-online.target
+
+[Timer]
+OnBootSec=5min
+OnCalendar=daily
+Persistent=true
+Unit=ct-update.service
+
+[Install]
+WantedBy=timers.target 

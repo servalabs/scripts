@@ -1,0 +1,12 @@
+[Unit]
+Description=Run CT Flag Monitor every 30 seconds
+After=network-online.target
+
+[Timer]
+OnBootSec=15sec
+OnUnitActiveSec=30sec
+Persistent=true
+Unit=ct.service
+
+[Install]
+WantedBy=timers.target 

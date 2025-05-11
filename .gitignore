@@ -1,0 +1,15 @@
+# Ignore installer.ini file
+installer.ini
+
+# Common system files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp 
+
+#

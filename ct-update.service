@@ -1,0 +1,13 @@
+[Unit]
+Description=CT Script Update Service
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ct.sh update
+StandardOutput=append:/var/log/ct-update.log
+StandardError=append:/var/log/ct-update.err.log
+
+[Install]
+WantedBy=multi-user.target 
