@@ -1,8 +1,47 @@
 #!/bin/bash
-# samba.sh v3.1 - Samba Share Configuration Script
-# bash <(curl -sL https://raw.githubusercontent.com/servalabs/scripts/main/general/samba.sh)
+# samba.sh Samba Share Configuration Script
 
 set -euo pipefail
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo "Options:"
+    echo "  -u, --user USERNAME     Samba username"
+    echo "  -p, --password PASS     Samba password"
+    echo "  -s, --share SHARE_NAME  Share name (default: files)"
+    echo "  -h, --help              Display this help message"
+    exit 1
+}
+
+# Parse command line arguments
+smb_user=""
+smb_pass=""
+share_name="files"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -u|--user)
+            smb_user="$2"
+            shift 2
+            ;;
+        -p|--password)
+            smb_pass="$2"
+            shift 2
+            ;;
+        -s|--share)
+            share_name="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+done
 
 # Ensure the script is run as root.
 if [ "$EUID" -ne 0 ]; then
@@ -13,26 +52,29 @@ fi
 # Variables
 samba_conf="/etc/samba/smb.conf"
 samba_dir="/files"
-share_name="files"
 smbusers_file="/etc/samba/smbusers"
 
-# Prompt for Samba username.
-read -p "Enter the Share username (e.g., admin): " smb_user
+# If username not provided via arguments, prompt for it
+if [ -z "$smb_user" ]; then
+    read -p "Enter the Share username (e.g., admin): " smb_user
+fi
 
-# Prompt for Samba password and ensure they match and are not empty.
-while true; do
-  read -s -p "Enter the Share password: " smb_pass
-  echo
-  read -s -p "Confirm the Share password: " smb_pass_confirm
-  echo
-  if [ "$smb_pass" != "$smb_pass_confirm" ]; then
-    echo "❌ Passwords do not match. Please try again."
-  elif [ -z "$smb_pass" ]; then
-    echo "❌ Password cannot be empty. Please try again."
-  else
-    break
-  fi
-done
+# If password not provided via arguments, prompt for it
+if [ -z "$smb_pass" ]; then
+    while true; do
+        read -s -p "Enter the Share password: " smb_pass
+        echo
+        read -s -p "Confirm the Share password: " smb_pass_confirm
+        echo
+        if [ "$smb_pass" != "$smb_pass_confirm" ]; then
+            echo "❌ Passwords do not match. Please try again."
+        elif [ -z "$smb_pass" ]; then
+            echo "❌ Password cannot be empty. Please try again."
+        else
+            break
+        fi
+    done
+fi
 
 # Ensure the Samba configuration file exists.
 if [ ! -f "$samba_conf" ]; then
