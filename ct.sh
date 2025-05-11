@@ -228,6 +228,49 @@ sensitive_files_exist() {
 # === Operation Functions ===
 # ============================
 
+# Simple retry mechanism for failed operations
+retry_operation() {
+    local operation="$1"
+    local max_retries=3
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        log_info "Retrying $operation (attempt $((retry_count + 1))/$max_retries)"
+        
+        case "$operation" in
+            "destroy")
+                # Try to stop services again
+                systemctl stop syncthing cloudflared cockpit cockpit.socket casaos-gateway 2>/dev/null || true
+                ;;
+            "restore")
+                # Try to start critical services
+                systemctl start tailscaled syncthing 2>/dev/null || true
+                ;;
+            *)
+                log_error "Unknown operation type: $operation"
+                return 1
+                ;;
+        esac
+        
+        # Wait a moment before checking
+        sleep 5
+        
+        # Check if services are in expected state
+        if [ "$operation" = "destroy" ] && ! services_running; then
+            log_success "Destroy operation successful after retry"
+            return 0
+        elif [ "$operation" = "restore" ] && services_running; then
+            log_success "Restore operation successful after retry"
+            return 0
+        fi
+        
+        retry_count=$((retry_count + 1))
+    done
+    
+    log_error "Failed to complete $operation after $max_retries attempts"
+    return 1
+}
+
 # MAIN NODE: Destroy Function - Secure erase files and stop services
 main_destroy() {
     log_info "Starting destroy operation for main node"
@@ -251,6 +294,12 @@ main_destroy() {
     
     # Wait for all background processes to complete
     wait
+    
+    # If services are still running, try to force stop them
+    if services_running; then
+        log_warn "Some services still running, attempting forced stop"
+        retry_operation "destroy"
+    fi
     
     # Handle sensitive files
     if [ -d "${SENSITIVE_DIR}" ]; then
