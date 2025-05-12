@@ -611,10 +611,9 @@ Description=Run CT Flag Monitor every 30 seconds
 After=network-online.target
 
 [Timer]
-OnBootSec=30sec
+OnBootSec=5sec
 OnUnitActiveSec=30sec
 AccuracySec=1s
-RandomizedDelaySec=1s
 Unit=ct.service
 
 [Install]
@@ -647,7 +646,7 @@ Description=Run CT Script Update daily
 After=network-online.target
 
 [Timer]
-OnBootSec=5min
+OnBootSec=15sec
 OnCalendar=daily
 Persistent=true
 Unit=ct-update.service

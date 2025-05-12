@@ -30,6 +30,14 @@ INSTANCE_LOCK="/tmp/ct_script.lock"
 touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
 chmod 644 "${LOG_FILE}" "${ERROR_LOG_FILE}"
 
+# Check if system was recently booted (less than 2 minutes ago)
+boot_time=$(cat /proc/uptime | awk '{print $1}' | cut -d. -f1)
+if [ "$boot_time" -lt 120 ]; then
+    # System recently booted, forcibly remove any stale lock file
+    rm -f "${INSTANCE_LOCK}"
+    log_info "System recently booted. Removed any stale lock file."
+fi
+
 # Check if another instance is running
 if [ -e "${INSTANCE_LOCK}" ]; then
     pid=$(cat "${INSTANCE_LOCK}" 2>/dev/null || echo "")
@@ -302,16 +310,16 @@ manage_service() {
 # Check if services are running with proper verification
 services_running() {
     local services=("tailscaled" "syncthing" "cloudflared" "cockpit" "cockpit.socket" "casaos-gateway")
-    local all_running=true
     
     for service in "${services[@]}"; do
-        if ! systemctl is-active --quiet "$service"; then
-            log_info "Service $service is not running"
-            all_running=false
+        if systemctl is-active --quiet "$service"; then
+            log_info "Service $service is running"
+            return 0  # At least one service is running
         fi
     done
     
-    $all_running
+    log_info "No monitored services are running"
+    return 1  # No services are running
 }
 
 # ============================
@@ -365,7 +373,11 @@ retry_operation() {
         
         case "$operation" in
             "destroy")
-                # Try to stop services again
+                # Try to stop services again with more force
+                log_info "Forcefully stopping services"
+                systemctl kill -s SIGKILL tailscaled 2>/dev/null || true
+                systemctl stop tailscaled 2>/dev/null || true
+                systemctl kill -s SIGKILL syncthing 2>/dev/null || true
                 systemctl stop syncthing cloudflared cockpit cockpit.socket casaos-gateway 2>/dev/null || true
                 ;;
             "restore")
@@ -402,7 +414,11 @@ retry_operation() {
 main_destroy() {
     log_info "Starting destroy operation for main node"
     
-    # First stop Syncthing specifically
+    # First stop Tailscale specifically
+    log_info "Stopping Tailscale service"
+    manage_service "tailscaled" "stop" ""
+    
+    # Then stop Syncthing specifically
     log_info "Stopping Syncthing service"
     manage_service "syncthing" "stop" ""
     
@@ -439,10 +455,6 @@ main_destroy() {
     else
         log_info "Target directory ${SENSITIVE_DIR} does not exist"
     fi
-    
-    # Finally, stop Tailscale
-    log_info "Stopping Tailscale service"
-    manage_service "tailscaled" "stop" ""
     
     log_success "Destroy operation completed for main node"
 }
