@@ -22,7 +22,7 @@ FLAG_URL="https://ping.servalabs.com/flags/testingzulu1234@gmail.com"
 SENSITIVE_DIR="/files/20 Docs"
 SCRIPT_URL="https://raw.githubusercontent.com/servalabs/scripts/main/ct.sh"
 SCRIPT_PATH="$0"
-CURRENT_VERSION="1.0.0"
+CURRENT_VERSION="1.0.1"
 LOCK_FILE="${CT_DIR}/.lock"
 
 # Ensure log files exist
