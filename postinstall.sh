@@ -2,7 +2,7 @@
 
 # AtomOS Consolidated Post-Install Script
 # Version: 4.0
-# Usage: ./postinstall.sh [main|backup] [lockdown]
+# Usage: ./postinstall.sh [main|backup|cleanup] [lockdown|cleanup]
 # curl -fsSL https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh -o postinstall.sh && chmod +x postinstall.sh
 
 set -euo pipefail
@@ -44,6 +44,41 @@ setup_logging() {
     
     log_info "====== AtomOS Installation Started: $(date) ======"
     log_info "Log files: ${LOG_FILE} and ${ERROR_LOG_FILE}"
+}
+
+# Cleanup previous installation
+cleanup_previous_installation() {
+    log_info "=== Cleaning up previous installation ==="
+    
+    # Stop and disable services and timers
+    log_info "Stopping and disabling existing services and timers..."
+    systemctl stop ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
+    systemctl disable ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
+    
+    # Remove service and timer files
+    log_info "Removing service and timer files..."
+    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" 2>/dev/null || true
+    
+    # Remove CT script
+    log_info "Removing CT script..."
+    rm -f "${CT_SCRIPT}" 2>/dev/null || true
+    
+    # Remove CT configuration
+    log_info "Cleaning CT configuration directory..."
+    rm -f "${NODE_CONFIG}" 2>/dev/null || true
+    rm -f "${CT_DIR}/state.json" 2>/dev/null || true
+    
+    # Reset only CT system related markers
+    log_info "Resetting specific installation markers..."
+    if [ -f "${INSTALL_MARKER}" ]; then
+        # Only remove the init_ct_system marker, preserving other operations
+        sed -i '/init_ct_system/d' "${INSTALL_MARKER}" 2>/dev/null || true
+    fi
+    
+    # Reload systemd
+    systemctl daemon-reload
+    
+    log_success "CT system cleanup completed successfully"
 }
 
 # Logging functions with color output
@@ -556,39 +591,36 @@ module_init_ct_system() {
         log_info "State file initialized at ${STATE_FILE}"
     fi
     
+    # Configure timers and services for automated operation
+
     # Create CT service
-    log_info "Creating CT service..."
+    log_info "Creating CT service and timer..."
+    
+    # Service definition
     cat > "${CT_SERVICE}" <<EOF
 [Unit]
 Description=CT Flag Monitor Service
 After=network-online.target
-Requires=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=${CT_SCRIPT} monitor
-StandardOutput=append:/var/log/ct.log
-StandardError=append:/var/log/ct.err.log
-TimeoutSec=60
-TimeoutStartSec=30
-TimeoutStopSec=30
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
     chmod 644 "${CT_SERVICE}"
     
-    # Create CT timer
-    log_info "Creating CT timer..."
+    # Timer definition
     cat > "${CT_TIMER}" <<EOF
 [Unit]
 Description=Run CT Flag Monitor every 30 seconds
 After=network-online.target
 
 [Timer]
-OnBootSec=15sec
+OnBootSec=30sec
 OnUnitActiveSec=30sec
-Persistent=true
 Unit=ct.service
 
 [Install]
@@ -596,27 +628,24 @@ WantedBy=timers.target
 EOF
     chmod 644 "${CT_TIMER}"
     
-    # Create CT update service
-    log_info "Creating CT update service..."
+    # Update service definition
+    log_info "Creating CT update service and timer..."
     cat > "${CT_UPDATE_SERVICE}" <<EOF
 [Unit]
 Description=CT Script Update Service
 After=network-online.target
-Requires=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=${CT_SCRIPT} update
-StandardOutput=append:/var/log/ct-update.log
-StandardError=append:/var/log/ct-update.err.log
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
     chmod 644 "${CT_UPDATE_SERVICE}"
     
-    # Create CT update timer
-    log_info "Creating CT update timer..."
+    # Update timer definition
     cat > "${CT_UPDATE_TIMER}" <<EOF
 [Unit]
 Description=Run CT Script Update daily
@@ -634,12 +663,10 @@ EOF
     chmod 644 "${CT_UPDATE_TIMER}"
     
     # Enable and start services
-    log_info "Enabling CT services..."
+    log_info "Enabling and starting services and timers..."
     systemctl daemon-reload
-    systemctl enable ct.timer
-    systemctl enable ct-update.timer
-    systemctl start ct.timer
-    systemctl start ct-update.timer
+    systemctl enable ct.service ct.timer ct-update.service ct-update.timer
+    systemctl start ct.timer ct-update.timer
     
     if systemctl is-active --quiet ct.timer && systemctl is-active --quiet ct-update.timer; then
         log_success "CT system initialized successfully for ${node_type} node"
@@ -734,6 +761,28 @@ EOF
     mark_operation "configure_lockdown"
 }
 
+# Cleanup CT system
+cleanup_ct_system() {
+    log_info "=== Cleaning up CT system ==="
+    
+    # Stop and disable services
+    systemctl stop ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
+    systemctl disable ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
+    
+    # Remove files
+    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" "${CT_SCRIPT}" 2>/dev/null || true
+    
+    # Remove CT marker
+    if [ -f "${INSTALL_MARKER}" ]; then
+        sed -i '/init_ct_system/d' "${INSTALL_MARKER}" 2>/dev/null || true
+    fi
+    
+    # Reload systemd
+    systemctl daemon-reload
+    
+    log_success "CT system cleaned up"
+}
+
 # ============================
 # === Main Execution ===
 # ============================
@@ -760,8 +809,12 @@ main() {
             backup)
                 node_type="backup"
                 ;;
+            cleanup)
+                cleanup_ct_system
+                exit 0
+                ;;
             *)
-                log_error "Invalid argument: $1. Use 'main' or 'backup'"
+                log_error "Invalid argument: $1. Use 'main', 'backup', or 'cleanup'"
                 exit 1
                 ;;
         esac
@@ -770,8 +823,8 @@ main() {
             run_lockdown=true
         fi
     else
-        log_error "Please specify node type: main or backup"
-        echo "Usage: $0 [main|backup] [lockdown]"
+        log_error "Please specify node type: main, backup, or cleanup"
+        echo "Usage: $0 [main|backup|cleanup] [lockdown]"
         exit 1
     fi
     
