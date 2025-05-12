@@ -2,7 +2,7 @@
 
 # AtomOS Consolidated Post-Install Script
 # Version: 4.0
-# Usage: ./postinstall.sh [main|backup|cleanup] [lockdown|cleanup]
+# Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
 # curl -fsSL https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh -o postinstall.sh && chmod +x postinstall.sh
 
 set -euo pipefail
@@ -46,39 +46,29 @@ setup_logging() {
     log_info "Log files: ${LOG_FILE} and ${ERROR_LOG_FILE}"
 }
 
-# Cleanup previous installation
-cleanup_previous_installation() {
-    log_info "=== Cleaning up previous installation ==="
+# Cleanup CT system
+cleanup_ct_system() {
+    log_info "=== Cleaning up CT system ==="
     
-    # Stop and disable services and timers
-    log_info "Stopping and disabling existing services and timers..."
+    # Stop and disable services
     systemctl stop ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
     systemctl disable ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
     
-    # Remove service and timer files
-    log_info "Removing service and timer files..."
-    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" 2>/dev/null || true
-    
-    # Remove CT script
-    log_info "Removing CT script..."
-    rm -f "${CT_SCRIPT}" 2>/dev/null || true
+    # Remove files
+    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" "${CT_SCRIPT}" 2>/dev/null || true
     
     # Remove CT configuration
-    log_info "Cleaning CT configuration directory..."
-    rm -f "${NODE_CONFIG}" 2>/dev/null || true
-    rm -f "${CT_DIR}/state.json" 2>/dev/null || true
+    rm -f "${NODE_CONFIG}" "${CT_DIR}/state.json" 2>/dev/null || true
     
-    # Reset only CT system related markers
-    log_info "Resetting specific installation markers..."
+    # Remove CT marker
     if [ -f "${INSTALL_MARKER}" ]; then
-        # Only remove the init_ct_system marker, preserving other operations
         sed -i '/init_ct_system/d' "${INSTALL_MARKER}" 2>/dev/null || true
     fi
     
     # Reload systemd
     systemctl daemon-reload
     
-    log_success "CT system cleanup completed successfully"
+    log_success "CT system cleaned up"
 }
 
 # Logging functions with color output
@@ -601,6 +591,7 @@ module_init_ct_system() {
 [Unit]
 Description=CT Flag Monitor Service
 After=network-online.target
+Requires=network-online.target
 
 [Service]
 Type=simple
@@ -634,6 +625,7 @@ EOF
 [Unit]
 Description=CT Script Update Service
 After=network-online.target
+Requires=network-online.target
 
 [Service]
 Type=simple
@@ -759,28 +751,6 @@ EOF
     
     log_success "System lockdown configuration completed successfully"
     mark_operation "configure_lockdown"
-}
-
-# Cleanup CT system
-cleanup_ct_system() {
-    log_info "=== Cleaning up CT system ==="
-    
-    # Stop and disable services
-    systemctl stop ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
-    systemctl disable ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
-    
-    # Remove files
-    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" "${CT_SCRIPT}" 2>/dev/null || true
-    
-    # Remove CT marker
-    if [ -f "${INSTALL_MARKER}" ]; then
-        sed -i '/init_ct_system/d' "${INSTALL_MARKER}" 2>/dev/null || true
-    fi
-    
-    # Reload systemd
-    systemctl daemon-reload
-    
-    log_success "CT system cleaned up"
 }
 
 # ============================
