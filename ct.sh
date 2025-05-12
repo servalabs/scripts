@@ -23,70 +23,10 @@ SENSITIVE_DIR="/files/20 Docs"
 SCRIPT_URL="https://raw.githubusercontent.com/servalabs/scripts/main/ct.sh"
 SCRIPT_PATH="$0"
 CURRENT_VERSION="1.0.1"
-LOCK_FILE="${CT_DIR}/.lock"
-INSTANCE_LOCK="/tmp/ct_script.lock"
 
 # Ensure log files exist
 touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
 chmod 644 "${LOG_FILE}" "${ERROR_LOG_FILE}"
-
-# Check if system was recently booted (less than 2 minutes ago)
-boot_time=$(cat /proc/uptime | awk '{print $1}' | cut -d. -f1)
-if [ "$boot_time" -lt 120 ]; then
-    # System recently booted, forcibly remove any stale lock file
-    rm -f "${INSTANCE_LOCK}"
-    log_info "System recently booted. Removed any stale lock file."
-fi
-
-# Check if another instance is running
-if [ -e "${INSTANCE_LOCK}" ]; then
-    pid=$(cat "${INSTANCE_LOCK}" 2>/dev/null || echo "")
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        echo "Another instance is already running (PID: $pid). Exiting."
-        exit 0
-    else
-        # Stale lock file - remove it
-        rm -f "${INSTANCE_LOCK}"
-    fi
-fi
-
-# Create instance lock with a 5-minute timeout
-echo $$ > "${INSTANCE_LOCK}"
-trap 'rm -f "${INSTANCE_LOCK}"; echo "Error on line $LINENO in function ${FUNCNAME[0]}" >> "$LOG_FILE"' ERR
-trap 'rm -f "${INSTANCE_LOCK}"' EXIT INT TERM
-
-# Add a timeout to automatically remove stale locks
-(
-    sleep 300  # 5 minutes
-    if [ -e "${INSTANCE_LOCK}" ]; then
-        lock_pid=$(cat "${INSTANCE_LOCK}" 2>/dev/null || echo "")
-        if [ "$lock_pid" = "$$" ]; then
-            rm -f "${INSTANCE_LOCK}"
-        fi
-    fi
-) &
-
-# ============================
-# === Lock Management ===
-# ============================
-acquire_lock() {
-    local lockfile="$1"
-    local timeout=300  # 5 minutes timeout
-    local start_time=$(date +%s)
-    
-    while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
-        if mkdir "$lockfile" 2>/dev/null; then
-            return 0
-        fi
-        sleep 1
-    done
-    return 1
-}
-
-release_lock() {
-    local lockfile="$1"
-    rmdir "$lockfile" 2>/dev/null || true
-}
 
 # ============================
 # === Logging Functions ===
@@ -116,37 +56,25 @@ get_node_type() {
     fi
 }
 
-# Update a field in the state JSON file with locking
+# Update a field in the state JSON file
 update_state() {
     local key="$1"
     local value="$2"
-    
-    if ! acquire_lock "${LOCK_FILE}"; then
-        log_error "Failed to acquire lock for state update"
-        return 1
-    fi
     
     if jq --arg key "$key" --arg value "$value" '.[$key]=$value' "${STATE_FILE}" > "${STATE_FILE}.tmp"; then
         mv "${STATE_FILE}.tmp" "${STATE_FILE}"
         log_info "State updated: ${key} set to ${value}"
     else
         log_error "Failed to update state for key ${key}"
-        release_lock "${LOCK_FILE}"
         return 1
     fi
     
-    release_lock "${LOCK_FILE}"
     return 0
 }
 
 # Initialize the state file if it doesn't exist
 init_state() {
     local node_type=$(get_node_type)
-    
-    if ! acquire_lock "${LOCK_FILE}"; then
-        log_error "Failed to acquire lock for state initialization"
-        return 1
-    fi
     
     if [ ! -f "${STATE_FILE}" ]; then
         if [ "${node_type}" == "main" ]; then
@@ -167,8 +95,6 @@ init_state() {
             log_info "System startup time recorded: ${system_startup}"
         fi
     fi
-    
-    release_lock "${LOCK_FILE}"
 }
 
 # Retrieve the flags from the remote dashboard with retry
