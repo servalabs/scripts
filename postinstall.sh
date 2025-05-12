@@ -594,9 +594,10 @@ After=network-online.target
 Requires=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=no
 ExecStart=${CT_SCRIPT} monitor
-Restart=always
+Restart=no
 
 [Install]
 WantedBy=multi-user.target
@@ -612,6 +613,8 @@ After=network-online.target
 [Timer]
 OnBootSec=30sec
 OnUnitActiveSec=30sec
+AccuracySec=1s
+RandomizedDelaySec=1s
 Unit=ct.service
 
 [Install]

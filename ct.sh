@@ -24,10 +24,39 @@ SCRIPT_URL="https://raw.githubusercontent.com/servalabs/scripts/main/ct.sh"
 SCRIPT_PATH="$0"
 CURRENT_VERSION="1.0.1"
 LOCK_FILE="${CT_DIR}/.lock"
+INSTANCE_LOCK="/tmp/ct_script.lock"
 
 # Ensure log files exist
 touch "${LOG_FILE}" "${ERROR_LOG_FILE}"
 chmod 644 "${LOG_FILE}" "${ERROR_LOG_FILE}"
+
+# Check if another instance is running
+if [ -e "${INSTANCE_LOCK}" ]; then
+    pid=$(cat "${INSTANCE_LOCK}" 2>/dev/null || echo "")
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "Another instance is already running (PID: $pid). Exiting."
+        exit 0
+    else
+        # Stale lock file - remove it
+        rm -f "${INSTANCE_LOCK}"
+    fi
+fi
+
+# Create instance lock with a 5-minute timeout
+echo $$ > "${INSTANCE_LOCK}"
+trap 'rm -f "${INSTANCE_LOCK}"; echo "Error on line $LINENO in function ${FUNCNAME[0]}" >> "$LOG_FILE"' ERR
+trap 'rm -f "${INSTANCE_LOCK}"' EXIT INT TERM
+
+# Add a timeout to automatically remove stale locks
+(
+    sleep 300  # 5 minutes
+    if [ -e "${INSTANCE_LOCK}" ]; then
+        lock_pid=$(cat "${INSTANCE_LOCK}" 2>/dev/null || echo "")
+        if [ "$lock_pid" = "$$" ]; then
+            rm -f "${INSTANCE_LOCK}"
+        fi
+    fi
+) &
 
 # ============================
 # === Lock Management ===
@@ -474,10 +503,23 @@ main_support() {
         "cockpit.socket"
     )
     
-    # Enable and start all support services
+    # Check which services need to be enabled
+    local services_to_enable=()
     for service in "${services[@]}"; do
-        manage_service "${service}" "enable" ""
+        if ! systemctl is-enabled --quiet "${service}" 2>/dev/null; then
+            services_to_enable+=("${service}")
+        fi
     done
+    
+    # Only take action if there are services to enable
+    if [ ${#services_to_enable[@]} -eq 0 ]; then
+        log_info "All support services are already enabled"
+    else
+        # Enable and start all support services that need it
+        for service in "${services_to_enable[@]}"; do
+            manage_service "${service}" "enable" ""
+        done
+    fi
     
     log_success "Support operation completed for main node"
 }
@@ -494,7 +536,7 @@ backup_support() {
     log_success "Support operation completed for backup node"
 }
 
-# MAIN NODE: Support Disable Function - Disable remote access services
+# Main node: Support Disable Function - Disable remote access services
 main_support_disable() {
     log_info "Starting support disable operation for main node"
     
@@ -505,10 +547,23 @@ main_support_disable() {
         "cockpit.socket"
     )
     
-    # Disable and stop all support services
+    # Check which services need to be disabled
+    local services_to_disable=()
     for service in "${services[@]}"; do
-        manage_service "${service}" "disable" ""
+        if systemctl is-enabled --quiet "${service}" 2>/dev/null; then
+            services_to_disable+=("${service}")
+        fi
     done
+    
+    # Only take action if there are services to disable
+    if [ ${#services_to_disable[@]} -eq 0 ]; then
+        log_info "All support services are already disabled"
+    else
+        # Disable and stop all support services that need it
+        for service in "${services_to_disable[@]}"; do
+            manage_service "${service}" "disable" ""
+        done
+    fi
     
     log_success "Support disable operation completed for main node"
 }
@@ -537,19 +592,37 @@ process_main_flags() {
     
     # Read current state from the local JSON state file
     local DELETED_FLAG=$(jq -r '.deleted_flag' "${STATE_FILE}")
+    local LAST_TRANSITION=$(jq -r '.last_transition' "${STATE_FILE}" 2>/dev/null || echo "")
+    local CURRENT_TIME=$(date '+%Y-%m-%dT%H:%M:%S')
+    local STATE_CHANGED=false
+    
     log_info "Current state: deleted_flag=${DELETED_FLAG}"
     
     # First handle F3 (support mode) as it's independent
     if [ "${f3}" == "true" ]; then
-        # Support Mode (F3 active)
-        log_info "F3 active: Enabling remote access"
-        main_support
-        update_state "last_transition" "$(date '+%Y-%m-%dT%H:%M:%S')"
+        # Check if any support services are disabled before taking action
+        if ! systemctl is-enabled --quiet cloudflared ||
+           ! systemctl is-enabled --quiet cockpit ||
+           ! systemctl is-enabled --quiet cockpit.socket; then
+            # Support Mode (F3 active)
+            log_info "F3 active: Enabling remote access"
+            main_support
+            STATE_CHANGED=true
+        else
+            log_info "F3 active: Remote access already enabled"
+        fi
     else
-        # Support Mode inactive
-        log_info "Support mode inactive: Disabling remote access"
-        main_support_disable
-        update_state "last_transition" "$(date '+%Y-%m-%dT%H:%M:%S')"
+        # Check if any support services are enabled before taking action
+        if systemctl is-enabled --quiet cloudflared 2>/dev/null ||
+           systemctl is-enabled --quiet cockpit 2>/dev/null ||
+           systemctl is-enabled --quiet cockpit.socket 2>/dev/null; then
+            # Support Mode inactive
+            log_info "Support mode inactive: Disabling remote access"
+            main_support_disable
+            STATE_CHANGED=true
+        else
+            log_info "Support mode inactive: Remote access already disabled"
+        fi
     fi
     
     # Then handle F1 (destroy mode)
@@ -558,6 +631,7 @@ process_main_flags() {
         if sensitive_files_exist || services_running; then
             log_info "F1 active: Files exist or services are running, executing destroy"
             main_destroy
+            STATE_CHANGED=true
         fi
         
         # After destroy, check conditions again with detailed logging
@@ -572,7 +646,7 @@ process_main_flags() {
         if ! sensitive_files_exist && ! services_running; then
             log_info "F1 active: All conditions met for shutdown - files deleted and services stopped"
             update_state "deleted_flag" "yes"
-            update_state "last_transition" "$(date '+%Y-%m-%dT%H:%M:%S')"
+            update_state "last_transition" "${CURRENT_TIME}"
             log_info "Initiating shutdown"
             /usr/sbin/shutdown -h now
             exit 0  # Exit immediately after initiating shutdown
@@ -590,7 +664,7 @@ process_main_flags() {
             log_info "F2 active: Files are deleted, restoring them"
             main_restore
             update_state "deleted_flag" "no"
-            update_state "last_transition" "$(date '+%Y-%m-%dT%H:%M:%S')"
+            STATE_CHANGED=true
         else
             log_warn "F2 active: No restore needed - files exist or not in deleted state"
         fi
@@ -602,7 +676,14 @@ process_main_flags() {
         if ! systemctl is-active --quiet tailscaled; then
             log_info "Starting Tailscale service"
             systemctl start tailscaled
+            STATE_CHANGED=true
         fi
+    fi
+    
+    # Only update last_transition if state actually changed
+    if [ "$STATE_CHANGED" = true ]; then
+        update_state "last_transition" "${CURRENT_TIME}"
+        log_info "State changed, updated last_transition timestamp"
     fi
 }
 
@@ -611,6 +692,9 @@ process_backup_flags() {
     local f1="$1"
     local f2="$2"
     local f3="$3"
+    
+    local CURRENT_TIME=$(date '+%Y-%m-%dT%H:%M:%S')
+    local STATE_CHANGED=false
     
     # === F1: Shutdown and disable Syncthing (highest priority) ===
     if [ "${f1}" == "true" ]; then
@@ -623,9 +707,27 @@ process_backup_flags() {
     
     # === F3: Enable or Disable Cloudflare and Cockpit (second priority) ===
     if [ "${f3}" == "true" ]; then
-        backup_support
+        # Check current status before making changes
+        local CF_STATUS=$(jq -r '.cloudflare_status' "${STATE_FILE}")
+        local CP_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
+        
+        if [ "${CF_STATUS}" != "on" ] || [ "${CP_STATUS}" != "on" ]; then
+            backup_support
+            STATE_CHANGED=true
+        else
+            log_info "F3 active: Support services already enabled"
+        fi
     else
-        backup_support_disable
+        # Check current status before making changes
+        local CF_STATUS=$(jq -r '.cloudflare_status' "${STATE_FILE}")
+        local CP_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
+        
+        if [ "${CF_STATUS}" != "off" ] || [ "${CP_STATUS}" != "off" ]; then
+            backup_support_disable
+            STATE_CHANGED=true
+        else
+            log_info "F3 inactive: Support services already disabled"
+        fi
     fi
     
     # === F2: Start Syncthing if off (third priority) ===
@@ -634,6 +736,7 @@ process_backup_flags() {
         if [ "${SYNC_STATUS}" != "on" ]; then
             backup_restore
             log_info "F2 active: Syncthing started."
+            STATE_CHANGED=true
         else
             log_info "F2 active: Syncthing already running."
         fi
@@ -642,7 +745,7 @@ process_backup_flags() {
     # === Check for continuous inactive state (only if no flags are active) ===
     if [ "${f1}" != "true" ] && [ "${f2}" != "true" ] && [ "${f3}" != "true" ]; then
         # Get current time
-        local NOW=$(date '+%Y-%m-%dT%H:%M:%S')
+        local NOW=${CURRENT_TIME}
         
         # Get system startup time
         local SYSTEM_STARTUP=$(jq -r '.system_startup_time' "${STATE_FILE}")
@@ -654,7 +757,7 @@ process_backup_flags() {
         local LAST_FLAGS_ACTIVE=$(jq -r '.last_flags_active' "${STATE_FILE}")
         if [ "${LAST_FLAGS_ACTIVE}" != "false" ]; then
             update_state "last_flags_active" "false"
-            update_state "last_transition" "${NOW}"
+            STATE_CHANGED=true
             # Only set continuous_inactive_start if it's not already set
             local CURRENT_INACTIVE_START=$(jq -r '.continuous_inactive_start' "${STATE_FILE}")
             if [ -z "${CURRENT_INACTIVE_START}" ] || [ "${CURRENT_INACTIVE_START}" == "null" ]; then
@@ -681,10 +784,16 @@ process_backup_flags() {
         local LAST_FLAGS_ACTIVE=$(jq -r '.last_flags_active' "${STATE_FILE}")
         if [ "${LAST_FLAGS_ACTIVE}" != "true" ]; then
             update_state "last_flags_active" "true"
-            update_state "last_transition" "$(date '+%Y-%m-%dT%H:%M:%S')"
+            STATE_CHANGED=true
             # Clear continuous_inactive_start when flags become active
             update_state "continuous_inactive_start" ""
         fi
+    fi
+    
+    # Only update last_transition if state actually changed
+    if [ "$STATE_CHANGED" = true ]; then
+        update_state "last_transition" "${CURRENT_TIME}"
+        log_info "State changed, updated last_transition timestamp"
     fi
 }
 
