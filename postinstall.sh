@@ -263,7 +263,7 @@ module_configure_ssh() {
     backup_file "${SSH_CONFIG}"
     
     # Try to fetch sshd_config from repo
-    if ! fetch_github_file "general/sshd_config" "${SSH_CONFIG}"; then
+    if ! fetch_github_file "sshd_config" "${SSH_CONFIG}"; then
         log_warn "Could not fetch SSH config from GitHub"
         
         # Create default SSH config
