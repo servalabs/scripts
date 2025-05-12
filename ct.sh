@@ -517,8 +517,8 @@ main_support() {
     else
         # Enable and start all support services that need it
         for service in "${services_to_enable[@]}"; do
-            manage_service "${service}" "enable" ""
-        done
+        manage_service "${service}" "enable" ""
+    done
     fi
     
     log_success "Support operation completed for main node"
@@ -561,8 +561,8 @@ main_support_disable() {
     else
         # Disable and stop all support services that need it
         for service in "${services_to_disable[@]}"; do
-            manage_service "${service}" "disable" ""
-        done
+        manage_service "${service}" "disable" ""
+    done
     fi
     
     log_success "Support disable operation completed for main node"
@@ -604,9 +604,9 @@ process_main_flags() {
         if ! systemctl is-enabled --quiet cloudflared ||
            ! systemctl is-enabled --quiet cockpit ||
            ! systemctl is-enabled --quiet cockpit.socket; then
-            # Support Mode (F3 active)
-            log_info "F3 active: Enabling remote access"
-            main_support
+        # Support Mode (F3 active)
+        log_info "F3 active: Enabling remote access"
+        main_support
             STATE_CHANGED=true
         else
             log_info "F3 active: Remote access already enabled"
@@ -616,9 +616,9 @@ process_main_flags() {
         if systemctl is-enabled --quiet cloudflared 2>/dev/null ||
            systemctl is-enabled --quiet cockpit 2>/dev/null ||
            systemctl is-enabled --quiet cockpit.socket 2>/dev/null; then
-            # Support Mode inactive
-            log_info "Support mode inactive: Disabling remote access"
-            main_support_disable
+        # Support Mode inactive
+        log_info "Support mode inactive: Disabling remote access"
+        main_support_disable
             STATE_CHANGED=true
         else
             log_info "Support mode inactive: Remote access already disabled"
@@ -712,7 +712,7 @@ process_backup_flags() {
         local CP_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
         
         if [ "${CF_STATUS}" != "on" ] || [ "${CP_STATUS}" != "on" ]; then
-            backup_support
+        backup_support
             STATE_CHANGED=true
         else
             log_info "F3 active: Support services already enabled"
@@ -723,7 +723,7 @@ process_backup_flags() {
         local CP_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
         
         if [ "${CF_STATUS}" != "off" ] || [ "${CP_STATUS}" != "off" ]; then
-            backup_support_disable
+        backup_support_disable
             STATE_CHANGED=true
         else
             log_info "F3 inactive: Support services already disabled"
