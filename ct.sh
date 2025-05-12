@@ -146,7 +146,15 @@ manage_service() {
     local action="$2"
     local state_key="$3"
     
-    log_info "Managing service ${service}: ${action}"
+    # Set a longer timeout for syncthing (120 seconds), shorter for other services (30 seconds)
+    local timeout=30
+    if [ "${service}" = "syncthing" ]; then
+        timeout=120
+    fi
+    
+    local start_time=$(date +%s)
+    
+    log_info "Managing service ${service}: ${action} (timeout: ${timeout}s)"
     
     case "${action}" in
         "start")

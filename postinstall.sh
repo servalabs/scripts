@@ -20,8 +20,6 @@ INSTALL_MARKER="/var/lib/atomos/install_marker"
 CT_DIR="/etc/ct"
 CT_BIN="/usr/local/bin"
 CT_SCRIPT="${CT_BIN}/ct.sh"
-CT_UPDATE_SERVICE="/etc/systemd/system/ct-update.service"
-CT_UPDATE_TIMER="/etc/systemd/system/ct-update.timer"
 CT_SERVICE="/etc/systemd/system/ct.service"
 CT_TIMER="/etc/systemd/system/ct.timer"
 GITHUB_REPO="servalabs/scripts"
@@ -51,11 +49,11 @@ cleanup_ct_system() {
     log_info "=== Cleaning up CT system ==="
     
     # Stop and disable services
-    systemctl stop ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
-    systemctl disable ct.service ct.timer ct-update.service ct-update.timer 2>/dev/null || true
+    systemctl stop ct.service ct.timer 2>/dev/null || true
+    systemctl disable ct.service ct.timer 2>/dev/null || true
     
     # Remove files
-    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_UPDATE_SERVICE}" "${CT_UPDATE_TIMER}" "${CT_SCRIPT}" 2>/dev/null || true
+    rm -f "${CT_SERVICE}" "${CT_TIMER}" "${CT_SCRIPT}" 2>/dev/null || true
     
     # Remove CT configuration
     rm -f "${NODE_CONFIG}" "${CT_DIR}/state.json" 2>/dev/null || true
@@ -619,51 +617,16 @@ WantedBy=timers.target
 EOF
     chmod 644 "${CT_TIMER}"
     
-    # Update service definition
-    log_info "Creating CT update service and timer..."
-    cat > "${CT_UPDATE_SERVICE}" <<EOF
-[Unit]
-Description=CT Script Update Service
-After=network-online.target
-Requires=network-online.target
-
-[Service]
-Type=simple
-ExecStart=${CT_SCRIPT} update
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    chmod 644 "${CT_UPDATE_SERVICE}"
-    
-    # Update timer definition
-    cat > "${CT_UPDATE_TIMER}" <<EOF
-[Unit]
-Description=Run CT Script Update daily
-After=network-online.target
-
-[Timer]
-OnBootSec=15sec
-OnCalendar=daily
-Persistent=true
-Unit=ct-update.service
-
-[Install]
-WantedBy=timers.target
-EOF
-    chmod 644 "${CT_UPDATE_TIMER}"
-    
     # Enable and start services
     log_info "Enabling and starting services and timers..."
     systemctl daemon-reload
-    systemctl enable ct.service ct.timer ct-update.service ct-update.timer
-    systemctl start ct.timer ct-update.timer
+    systemctl enable ct.service ct.timer
+    systemctl start ct.timer
     
-    if systemctl is-active --quiet ct.timer && systemctl is-active --quiet ct-update.timer; then
+    if systemctl is-active --quiet ct.timer; then
         log_success "CT system initialized successfully for ${node_type} node"
     else
-        log_error "Failed to start CT timers"
+        log_error "Failed to start CT timer"
         return 1
     fi
     
