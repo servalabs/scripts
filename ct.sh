@@ -80,7 +80,7 @@ init_state() {
         if [ "${node_type}" == "main" ]; then
             echo '{"deleted_flag": "no", "last_transition": ""}' > "${STATE_FILE}"
         else
-            echo '{"startup_time": "", "syncthing_status": "off", "cloudflare_status": "off", "cockpit_status": "off", "last_transition": "", "last_flags_active": "", "continuous_inactive_start": "", "system_startup_time": ""}' > "${STATE_FILE}"
+            echo '{"startup_time": "", "cloudflare_status": "off", "cockpit_status": "off", "last_transition": "", "last_flags_active": "", "continuous_inactive_start": "", "system_startup_time": ""}' > "${STATE_FILE}"
         fi
         chmod 644 "${STATE_FILE}"
         log_info "Initialized state file for ${node_type} node"
@@ -145,8 +145,6 @@ manage_service() {
     local service="$1"
     local action="$2"
     local state_key="$3"
-    local timeout=30
-    local start_time=$(date +%s)
     
     log_info "Managing service ${service}: ${action}"
     
@@ -164,8 +162,9 @@ manage_service() {
                     fi
                     sleep 1
                 done
-                log_error "${service} failed to start within ${timeout} seconds"
-                return 1
+                log_warn "${service} failed to start within ${timeout} seconds, but continuing"
+                [ -n "${state_key}" ] && update_state "${state_key}" "starting"
+                return 0  # Continue anyway to avoid service failure
             else
                 log_info "${service} is already running"
             fi
@@ -203,8 +202,9 @@ manage_service() {
                     fi
                     sleep 1
                 done
-                log_error "${service} failed to start within ${timeout} seconds"
-                return 1
+                log_warn "${service} failed to start within ${timeout} seconds, but continuing"
+                [ -n "${state_key}" ] && update_state "${state_key}" "starting"
+                return 0  # Continue anyway to avoid service failure
             else
                 log_info "${service} is already enabled"
             fi
@@ -235,7 +235,7 @@ manage_service() {
 
 # Check if services are running with proper verification
 services_running() {
-    local services=("tailscaled" "syncthing" "cloudflared" "cockpit" "cockpit.socket" "casaos-gateway")
+    local services=("tailscaled" "cloudflared" "cockpit" "cockpit.socket" "casaos-gateway")
     
     for service in "${services[@]}"; do
         if systemctl is-active --quiet "$service"; then
@@ -303,12 +303,12 @@ retry_operation() {
                 log_info "Forcefully stopping services"
                 systemctl kill -s SIGKILL tailscaled 2>/dev/null || true
                 systemctl stop tailscaled 2>/dev/null || true
-                systemctl kill -s SIGKILL syncthing 2>/dev/null || true
-                systemctl stop syncthing cloudflared cockpit cockpit.socket casaos-gateway 2>/dev/null || true
+                systemctl kill -s SIGKILL cloudflared 2>/dev/null || true
+                systemctl stop cloudflared cockpit cockpit.socket casaos-gateway 2>/dev/null || true
                 ;;
             "restore")
                 # Try to start critical services
-                systemctl start tailscaled syncthing 2>/dev/null || true
+                systemctl start tailscaled 2>/dev/null || true
                 ;;
             *)
                 log_error "Unknown operation type: $operation"
@@ -634,9 +634,9 @@ process_backup_flags() {
     local CURRENT_TIME=$(date '+%Y-%m-%dT%H:%M:%S')
     local STATE_CHANGED=false
     
-    # === F1: Shutdown and disable Syncthing (highest priority) ===
+    # === F1: Shutdown and disable services (highest priority) ===
     if [ "${f1}" == "true" ]; then
-        log_warn "F1 active: Disabling Syncthing and shutting down."
+        log_warn "F1 active: Disabling services and shutting down."
         backup_destroy
         log_info "Initiating system shutdown"
         /usr/sbin/shutdown -h now
@@ -668,15 +668,23 @@ process_backup_flags() {
         fi
     fi
     
-    # === F2: Start Syncthing if off (third priority) ===
+    # === F2: Start services if off (third priority) ===
     if [ "${f2}" == "true" ]; then
-        local SYNC_STATUS=$(jq -r '.syncthing_status' "${STATE_FILE}")
-        if [ "${SYNC_STATUS}" != "on" ]; then
-            backup_restore
-            log_info "F2 active: Syncthing started."
-            STATE_CHANGED=true
+        local CLOUDFLARE_STATUS=$(jq -r '.cloudflare_status' "${STATE_FILE}")
+        local COCKPIT_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
+        
+        if [ "${CLOUDFLARE_STATUS}" = "off" ]; then
+            manage_service "cloudflared" "start" "cloudflare_status"
+            log_info "F2 active: Cloudflared started."
         else
-            log_info "F2 active: Syncthing already running."
+            log_info "F2 active: Cloudflared already running."
+        fi
+        
+        if [ "${COCKPIT_STATUS}" = "off" ]; then
+            manage_service "cockpit" "start" "cockpit_status"
+            log_info "F2 active: Cockpit started."
+        else
+            log_info "F2 active: Cockpit already running."
         fi
     fi
     

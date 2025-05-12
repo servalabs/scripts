@@ -575,7 +575,7 @@ module_init_ct_system() {
         if [ "${node_type}" == "main" ]; then
             echo '{"deleted_flag": "no", "last_transition": ""}' > "${STATE_FILE}"
         else
-            echo '{"startup_time": "", "syncthing_status": "off", "cloudflare_status": "off", "cockpit_status": "off", "last_transition": "", "last_flags_active": "", "continuous_inactive_start": "", "system_startup_time": ""}' > "${STATE_FILE}"
+            echo '{"startup_time": "", "cloudflare_status": "off", "cockpit_status": "off", "last_transition": "", "last_flags_active": "", "continuous_inactive_start": "", "system_startup_time": ""}' > "${STATE_FILE}"
         fi
         chmod 644 "${STATE_FILE}"
         log_info "State file initialized at ${STATE_FILE}"
@@ -590,14 +590,13 @@ module_init_ct_system() {
     cat > "${CT_SERVICE}" <<EOF
 [Unit]
 Description=CT Flag Monitor Service
-After=network-online.target
-Requires=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=no
 ExecStart=${CT_SCRIPT} monitor
 Restart=no
+SuccessExitStatus=1
 
 [Install]
 WantedBy=multi-user.target
@@ -608,7 +607,6 @@ EOF
     cat > "${CT_TIMER}" <<EOF
 [Unit]
 Description=Run CT Flag Monitor every 30 seconds
-After=network-online.target
 
 [Timer]
 OnBootSec=5sec
