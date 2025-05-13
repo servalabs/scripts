@@ -1,0 +1,12 @@
+[Unit]
+Description=CT Flag Monitor Service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/bin/ct.sh monitor
+Restart=no
+SuccessExitStatus=1
+
+[Install]
+WantedBy=multi-user.target 

@@ -579,43 +579,24 @@ module_init_ct_system() {
         log_info "State file initialized at ${STATE_FILE}"
     fi
     
-    # Configure timers and services for automated operation
-
-    # Create CT service
-    log_info "Creating CT service and timer..."
+    # Download CT service and timer files
+    log_info "Downloading CT service and timer files..."
     
-    # Service definition
-    cat > "${CT_SERVICE}" <<EOF
-[Unit]
-Description=CT Flag Monitor Service
-
-[Service]
-Type=oneshot
-RemainAfterExit=no
-ExecStart=${CT_SCRIPT} monitor
-Restart=no
-SuccessExitStatus=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    # Download service file
+    if ! curl -fsSL -o "${CT_SERVICE}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.service"; then
+        log_error "Failed to download CT service file"
+        return 1
+    fi
     chmod 644 "${CT_SERVICE}"
+    log_info "CT service file downloaded and installed at ${CT_SERVICE}"
     
-    # Timer definition
-    cat > "${CT_TIMER}" <<EOF
-[Unit]
-Description=Run CT Flag Monitor every 30 seconds
-
-[Timer]
-OnBootSec=5sec
-OnUnitActiveSec=30sec
-AccuracySec=1s
-Unit=ct.service
-
-[Install]
-WantedBy=timers.target
-EOF
+    # Download timer file
+    if ! curl -fsSL -o "${CT_TIMER}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.timer"; then
+        log_error "Failed to download CT timer file"
+        return 1
+    fi
     chmod 644 "${CT_TIMER}"
+    log_info "CT timer file downloaded and installed at ${CT_TIMER}"
     
     # Enable and start services
     log_info "Enabling and starting services and timers..."

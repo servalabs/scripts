@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CT Flag Monitor every 30 seconds
+
+[Timer]
+OnBootSec=5sec
+OnUnitActiveSec=30sec
+AccuracySec=1s
+Unit=ct.service
+
+[Install]
+WantedBy=timers.target 
