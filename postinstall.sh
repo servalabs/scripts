@@ -207,6 +207,11 @@ EOF
     log_info "Upgrading installed packages..."
     apt-get upgrade --with-new-pkgs -y
     
+    # Disable systemd-networkd-wait-online service
+    log_info "Disabling systemd-networkd-wait-online service..."
+    systemctl disable systemd-networkd-wait-online.service
+    systemctl mask systemd-networkd-wait-online.service
+    
     # Turn on Tailscale if installed
     if command -v tailscale > /dev/null; then
         log_info "Turning on Tailscale with SSH enabled..."
@@ -655,7 +660,6 @@ EOF
     systemctl mask getty@tty1.service
     systemctl mask getty@tty3.service
     systemctl mask getty.target
-    systemctl mask systemd-networkd-wait-online
     
     # Configure getty override
     log_info "Configuring getty override..."
