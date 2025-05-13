@@ -145,12 +145,7 @@ manage_service() {
     local service="$1"
     local action="$2"
     local state_key="$3"
-    
-    # Set a longer timeout for syncthing (120 seconds), shorter for other services (30 seconds)
     local timeout=30
-    if [ "${service}" = "syncthing" ]; then
-        timeout=120
-    fi
     
     local start_time=$(date +%s)
     
@@ -352,10 +347,6 @@ main_destroy() {
     log_info "Stopping Tailscale service"
     manage_service "tailscaled" "stop" ""
     
-    # Then stop Syncthing specifically
-    log_info "Stopping Syncthing service"
-    manage_service "syncthing" "stop" ""
-    
     # Define all other services to stop
     local services=(
         "cloudflared"
@@ -397,9 +388,6 @@ main_destroy() {
 backup_destroy() {
     log_info "Starting destroy operation for backup node"
     
-    # Stop Syncthing service
-    manage_service "syncthing" "stop" "syncthing_status"
-    
     log_success "Destroy operation completed for backup node"
 }
 
@@ -410,7 +398,6 @@ main_restore() {
     # Define services to restore
     local services=(
         "tailscaled"           # Network first
-        "syncthing"            # File sync
         "casaos-gateway.service"
     )
     
@@ -431,9 +418,6 @@ main_restore() {
 # BACKUP NODE: Restore Function - Start Syncthing
 backup_restore() {
     log_info "Starting restore operation for backup node"
-    
-    # Start Syncthing service
-    manage_service "syncthing" "start" "syncthing_status"
     
     log_success "Restore operation completed for backup node"
 }
