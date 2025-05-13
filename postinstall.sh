@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # AtomOS Consolidated Post-Install Script
-# Version: 4.1
-# Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
-# curl -fsSL https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh -o postinstall.sh && chmod +x postinstall.sh
+# Version: 4.2
+#Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
+# curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -s https://api.github.com/repos/servalabs/scripts/commits?path=postinstall.sh\&per_page=1 | jq -r '.[0].sha')/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
 
 set -euo pipefail
 trap 'echo "Error on line $LINENO in function ${FUNCNAME[0]}"; exit 1' ERR
