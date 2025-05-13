@@ -784,10 +784,9 @@ main() {
 ║       AtomOS Installation Completed!           ║
 ║                                                ║
 ║  The system has been configured as a           ║
-║  ${node_type^^} server.                               ║
+║  ${node_type^^} server.                        ║
 ║                                                ║
 ║  - Log files: ${LOG_DIR}                       ║
-║  - Installation marker: ${INSTALL_MARKER}      ║
 ║                                                ║
 ║  Thank you for using AtomOS!                   ║
 ╚════════════════════════════════════════════════╝
