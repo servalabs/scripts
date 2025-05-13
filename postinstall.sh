@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # AtomOS Consolidated Post-Install Script
-# Version: 4.0
+# Version: 4.1
 # Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
 # curl -fsSL https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh -o postinstall.sh && chmod +x postinstall.sh
 
