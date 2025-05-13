@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # AtomOS Installation Verification Script
-# Version: 1.0
+# Version: 1.1
 # Usage: ./verify_install.sh
-# curl -fsSL https://raw.githubusercontent.com/servalabs/scripts/main/verify_install.sh -o verify_install.sh && chmod +x verify_install.sh
-
+# curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -s https://api.github.com/repos/servalabs/scripts/commits?path=verify_install.sh\&per_page=1 | jq -r '.[0].sha')/verify_install.sh" -o verify_install.sh && chmod +x verify_install.sh && ./verify_install.sh
 set -euo pipefail
 
 # Color codes for output
