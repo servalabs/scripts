@@ -1,5 +1,8 @@
 #!/bin/bash
 
+echo "AtomOS Install Script v4.2"
+sleep 2
+
 # AtomOS Consolidated Post-Install Script
 # Version: 4.2
 #Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
