@@ -835,7 +835,9 @@ dispatch_command() {
             if [ "${node_type}" == "main" ]; then
                 main_destroy
             else
-                log_info "Destroy operation not implemented for backup node"
+                log_info "Destroy operation for backup node - initiating shutdown"
+                /usr/sbin/shutdown -h now
+                exit 0
             fi
             ;;
             
