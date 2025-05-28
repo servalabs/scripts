@@ -372,10 +372,34 @@ main_destroy() {
     # Handle sensitive files
     if [ -d "${SENSITIVE_DIR}" ]; then
         log_info "Securely erasing files in ${SENSITIVE_DIR}"
-        # Securely erase all files except .stfolder
-        find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type f -exec shred -u -n 1 -z {} \;
+        
+        # Count files before destruction
+        local file_count=$(find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type f | wc -l)
+        local dir_count=$(find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type d | wc -l)
+        log_info "Found ${file_count} files and ${dir_count} directories to destroy"
+        
+        # Securely erase all files except .stfolder with multiple passes
+        if [ ${file_count} -gt 0 ]; then
+            log_info "Performing secure file destruction with multiple passes..."
+            find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type f -exec shred -v -u -n 3 -z {} \;
+            
+            # Verify files are gone
+            local remaining_files=$(find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type f | wc -l)
+            if [ ${remaining_files} -eq 0 ]; then
+                log_success "All ${file_count} files securely destroyed"
+            else
+                log_error "File destruction incomplete: ${remaining_files} files remain"
+            fi
+        fi
+        
         # Remove any remaining directories (except .stfolder)
-        find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type d -exec rm -rf {} \;
+        if [ ${dir_count} -gt 0 ]; then
+            find "${SENSITIVE_DIR}" -mindepth 1 -maxdepth 1 -not -name ".stfolder" -type d -exec rm -rf {} \;
+            log_info "Removed ${dir_count} directories"
+        fi
+        
+        # Sync filesystem to ensure writes are committed
+        sync
         log_info "Successfully securely erased all contents while preserving .stfolder"
     else
         log_info "Target directory ${SENSITIVE_DIR} does not exist"
