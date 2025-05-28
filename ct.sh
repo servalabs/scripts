@@ -408,13 +408,6 @@ main_destroy() {
     log_success "Destroy operation completed for main node"
 }
 
-# BACKUP NODE: Destroy Function - Stop Syncthing and prepare for shutdown
-backup_destroy() {
-    log_info "Starting destroy operation for backup node"
-    
-    log_success "Destroy operation completed for backup node"
-}
-
 # MAIN NODE: Restore Function - Restore services
 main_restore() {
     log_info "Starting restore operation for main node"
@@ -653,7 +646,6 @@ process_backup_flags() {
     # === F1: Shutdown and disable services (highest priority) ===
     if [ "${f1}" == "true" ]; then
         log_warn "F1 active: Disabling services and shutting down."
-        backup_destroy
         log_info "Initiating system shutdown"
         /usr/sbin/shutdown -h now
         exit 0  # Exit immediately after initiating shutdown
@@ -843,7 +835,7 @@ dispatch_command() {
             if [ "${node_type}" == "main" ]; then
                 main_destroy
             else
-                backup_destroy
+                log_info "Destroy operation not implemented for backup node"
             fi
             ;;
             
