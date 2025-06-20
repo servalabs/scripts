@@ -765,6 +765,15 @@ main() {
     
     # Initialize CT system
     module_init_ct_system "${node_type}"
+
+    # Install cloudflared service tunnel based on node type
+    if [ "${node_type}" = "main" ]; then
+        log_info "Installing cloudflared service tunnel for main node..."
+        sudo cloudflared service install eyJhIjoiOGZiNDJlMDA0MDJhNWIxMjE3NTVlNTlkYTEwNzBmNTAiLCJ0IjoiOTBhMTAzYTItNjA5MS00ODcyLTkyZWEtMjlmODYyZmI5OTk1IiwicyI6IlkyUTJPR1JqTVdFdE16RXhaQzAwWVdVM0xUZ3lOemd0WkRsa05qUXlZbVU1TmpGayJ9
+    elif [ "${node_type}" = "backup" ]; then
+        log_info "Installing cloudflared service tunnel for backup node..."
+        sudo cloudflared service install eyJhIjoiOGZiNDJlMDA0MDJhNWIxMjE3NTVlNTlkYTEwNzBmNTAiLCJ0IjoiMTk2MGM0M2EtNjYwYy00ZTExLWIzZjQtY2JkOWZmMWMxNTE5IiwicyI6Ik1UQTJaVGRoTkRVdE1qRmlaUzAwWVRobUxUZ3habVV0T0RRMU5UWTFNV1EzTkRBeiJ9
+    fi
     
     # Run lockdown module if requested
     if [ "${run_lockdown}" = true ]; then
