@@ -29,6 +29,7 @@ GITHUB_REPO="servalabs/scripts"
 GITHUB_BRANCH="main"
 CT_SCRIPT_URL="https://raw.githubusercontent.com/servalabs/scripts/main/ct.sh"
 NODE_CONFIG="${CT_DIR}/node.conf"
+GITHUB_TOKEN="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"
 
 # Create log directory immediately
 mkdir -p "${LOG_DIR}" "${CT_DIR}"
