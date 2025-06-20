@@ -49,7 +49,14 @@ log_success() { log "SUCCESS" "$@"; }
 # Get the node type (main or backup)
 get_node_type() {
     if [ -f "${NODE_CONFIG}" ]; then
-        cat "${NODE_CONFIG}"
+        local node_type
+        node_type=$(cat "${NODE_CONFIG}" | tr -d '\r\n ')
+        if [ "$node_type" = "main" ] || [ "$node_type" = "backup" ]; then
+            echo "$node_type"
+        else
+            log_error "Invalid node type in ${NODE_CONFIG}: '$node_type' (must be 'main' or 'backup')"
+            exit 1
+        fi
     else
         log_error "Node configuration file not found at ${NODE_CONFIG}"
         exit 1
