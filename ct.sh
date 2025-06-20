@@ -124,10 +124,10 @@ fetch_flags() {
 parse_flags() {
     local flags_json="$1"
     
-    # Parse F1, F2, F3 flags
-    local f1=$(echo "${flags_json}" | jq -r '.[] | select(.flagName=="F1") | .enabled')
-    local f2=$(echo "${flags_json}" | jq -r '.[] | select(.flagName=="F2") | .enabled')
-    local f3=$(echo "${flags_json}" | jq -r '.[] | select(.flagName=="F3") | .enabled')
+    # Parse F1, F2, F3 flags, defaulting to "false" if null or not present.
+    local f1=$(echo "${flags_json}" | jq -r '(.[] | select(.flagName=="F1") | .enabled) // "false"')
+    local f2=$(echo "${flags_json}" | jq -r '(.[] | select(.flagName=="F2") | .enabled) // "false"')
+    local f3=$(echo "${flags_json}" | jq -r '(.[] | select(.flagName=="F3") | .enabled) // "false"')
     
     # Log the flag values
     log_info "Parsed flags: F1=${f1}, F2=${f2}, F3=${f3}"
