@@ -93,14 +93,11 @@ init_state() {
         log_info "Initialized state file for ${node_type} node"
     fi
     
-    # Set system startup time for backup node if not already set
+    # Set system startup time for backup node on every run
     if [ "${node_type}" == "backup" ]; then
-        local current_startup=$(jq -r '.system_startup_time' "${STATE_FILE}")
-        if [ -z "${current_startup}" ] || [ "${current_startup}" == "null" ]; then
-            local system_startup=$(uptime -s)
-            update_state "system_startup_time" "${system_startup}"
-            log_info "System startup time recorded: ${system_startup}"
-        fi
+        local system_startup=$(uptime -s)
+        update_state "system_startup_time" "${system_startup}"
+        log_info "System startup time recorded: ${system_startup}"
     fi
 }
 
