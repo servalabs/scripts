@@ -95,9 +95,9 @@ init_state() {
     
     # Set system startup time for backup node on every run
     if [ "${node_type}" == "backup" ]; then
-        local system_startup=$(uptime -s)
-        update_state "system_startup_time" "${system_startup}"
-        log_info "System startup time recorded: ${system_startup}"
+            local system_startup=$(uptime -s)
+            update_state "system_startup_time" "${system_startup}"
+            log_info "System startup time recorded: ${system_startup}"
     fi
 }
 
@@ -697,54 +697,6 @@ process_backup_flags() {
             log_info "F2 active: Cockpit started."
         else
             log_info "F2 active: Cockpit already running."
-        fi
-    fi
-    
-    # === Check for continuous inactive state (only if no flags are active) ===
-    if [ "${f1}" != "true" ] && [ "${f2}" != "true" ] && [ "${f3}" != "true" ]; then
-        # Get current time
-        local NOW=${CURRENT_TIME}
-        
-        # Get system startup time
-        local SYSTEM_STARTUP=$(jq -r '.system_startup_time' "${STATE_FILE}")
-        local SYSTEM_STARTUP_EPOCH=$(date -d "${SYSTEM_STARTUP}" +%s)
-        local CURRENT_EPOCH=$(date +%s)
-        local UPTIME=$((CURRENT_EPOCH - SYSTEM_STARTUP_EPOCH))
-        
-        # Update last flags active state
-        local LAST_FLAGS_ACTIVE=$(jq -r '.last_flags_active' "${STATE_FILE}")
-        if [ "${LAST_FLAGS_ACTIVE}" != "false" ]; then
-            update_state "last_flags_active" "false"
-            STATE_CHANGED=true
-            # Only set continuous_inactive_start if it's not already set
-            local CURRENT_INACTIVE_START=$(jq -r '.continuous_inactive_start' "${STATE_FILE}")
-            if [ -z "${CURRENT_INACTIVE_START}" ] || [ "${CURRENT_INACTIVE_START}" == "null" ]; then
-                update_state "continuous_inactive_start" "${NOW}"
-            fi
-        fi
-        
-        # Check continuous inactive time
-        local CONTINUOUS_START=$(jq -r '.continuous_inactive_start' "${STATE_FILE}")
-        if [ -n "${CONTINUOUS_START}" ] && [ "${CONTINUOUS_START}" != "null" ]; then
-            local START_EPOCH=$(date -d "$(echo "${CONTINUOUS_START}" | sed 's/T/ /')" +%s)
-            local ELAPSED=$((CURRENT_EPOCH - START_EPOCH))
-            
-            if [ "${ELAPSED}" -ge 3600 ]; then
-                log_info "All flags have been continuously inactive for 1 hour. System uptime: $((UPTIME / 60)) minutes. Shutting down."
-                /usr/sbin/shutdown -h now
-                exit 0
-            else
-                log_info "All flags inactive. Continuous inactive time: $((ELAPSED / 60)) minutes. System uptime: $((UPTIME / 60)) minutes."
-            fi
-        fi
-    else
-        # Update last flags active state if flags are active
-        local LAST_FLAGS_ACTIVE=$(jq -r '.last_flags_active' "${STATE_FILE}")
-        if [ "${LAST_FLAGS_ACTIVE}" != "true" ]; then
-            update_state "last_flags_active" "true"
-            STATE_CHANGED=true
-            # Clear continuous_inactive_start when flags become active
-            update_state "continuous_inactive_start" ""
         fi
     fi
     
