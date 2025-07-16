@@ -683,20 +683,11 @@ process_backup_flags() {
     # === F2: Start services if off (third priority) ===
     if [ "${f2}" == "true" ]; then
         local CLOUDFLARE_STATUS=$(jq -r '.cloudflare_status' "${STATE_FILE}")
-        local COCKPIT_STATUS=$(jq -r '.cockpit_status' "${STATE_FILE}")
-        
         if [ "${CLOUDFLARE_STATUS}" = "off" ]; then
             manage_service "cloudflared" "start" "cloudflare_status"
             log_info "F2 active: Cloudflared started."
         else
             log_info "F2 active: Cloudflared already running."
-        fi
-        
-        if [ "${COCKPIT_STATUS}" = "off" ]; then
-            manage_service "cockpit" "start" "cockpit_status"
-            log_info "F2 active: Cockpit started."
-        else
-            log_info "F2 active: Cockpit already running."
         fi
     fi
     
