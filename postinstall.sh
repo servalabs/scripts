@@ -270,12 +270,8 @@ module_configure_ssh() {
     # Backup existing config
     backup_file "${SSH_CONFIG}"
     
-    # Try to fetch sshd_config from repo
-    if ! fetch_github_file "sshd_config" "${SSH_CONFIG}"; then
-        log_warn "Could not fetch SSH config from GitHub"
-        
-        # Create default SSH config
-        cat > "${SSH_CONFIG}" <<EOF
+    # Create SSH config with secure defaults
+    cat > "${SSH_CONFIG}" <<EOF
 # Protocol settings
 Protocol 2
 Port 717
@@ -322,7 +318,6 @@ ClientAliveCountMax 2
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 EOF
-    fi
     
     # Configure networkadmin user
     log_info "Configuring networkadmin user..."
@@ -341,7 +336,7 @@ EOF
     
     # Write authorized_keys with proper permissions
     cat > "${AUTH_KEYS_FILE}" <<'EOF'
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINx7g1o13c+ki6+zJqzZaR1x+d+sxSBHxeRrfYzXct4W eddsa-key-20250329
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB7BKQCCozFTkfhVTUB1/L9eIptxBFC8Yrk3kZlJKTbH ed25519-key-202509
 EOF
     
     chown networkadmin:networkadmin "${AUTH_KEYS_FILE}"
