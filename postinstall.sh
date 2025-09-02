@@ -6,7 +6,7 @@ sleep 2
 # AtomOS Consolidated Post-Install Script
 # Version: 4.2
 #Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
-# apt install jq -y && GITHUB_TOKEN="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" && curl -H "Authorization: token $GITHUB_TOKEN" -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -H \"Authorization: token $GITHUB_TOKEN\" -s https://api.github.com/repos/servalabs/scripts/commits?path=postinstall.sh\&per_page=1 | jq -r '.[0].sha')/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
+# apt install jq -y && curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -s https://api.github.com/repos/servalabs/scripts/commits?path=postinstall.sh\&per_page=1 | jq -r '.[0].sha')/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
 set -euo pipefail
 trap 'echo "Error on line $LINENO in function ${FUNCNAME[0]}"; exit 1' ERR
 
