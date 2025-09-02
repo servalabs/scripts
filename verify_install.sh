@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -s https://api.github.com/repos/servalabs/scripts/commits?path=verify_install.sh\&per_page=1 | jq -r '.[0].sha')/verify_install.sh" -o verify_install.sh && chmod +x verify_install.sh && ./verify_install.sh
+# Download the latest version from main branch
+curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/main/verify_install.sh" -o verify_install.sh && chmod +x verify_install.sh && ./verify_install.sh
 
 echo "AtomOS Installation Verify Script v1.1"
 sleep 2
