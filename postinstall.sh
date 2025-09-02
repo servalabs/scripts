@@ -6,7 +6,7 @@ sleep 2
 # AtomOS Consolidated Post-Install Script
 # Version: 4.2
 #Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
-# apt install jq -y && curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/$(curl -s https://api.github.com/repos/servalabs/scripts/commits?path=postinstall.sh\&per_page=1 | jq -r '.[0].sha')/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
+# curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
 set -euo pipefail
 trap 'echo "Error on line $LINENO in function ${FUNCNAME[0]}"; exit 1' ERR
 
@@ -140,15 +140,9 @@ fetch_github_file() {
     local output_path="$2"
     
     log_info "Fetching ${file_path} from GitHub..."
-    local download_url
-    download_url=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${GITHUB_REPO}/contents/${file_path}?ref=${GITHUB_BRANCH}" | jq -r '.download_url')
+    local download_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${file_path}"
     
-    if [ -z "${download_url}" ] || [ "${download_url}" = "null" ]; then
-        log_error "Failed to get download URL for ${file_path}"
-        return 1
-    fi
-    
-    if ! curl -sSL -H "Authorization: token $GITHUB_TOKEN" -o "${output_path}" "${download_url}"; then
+    if ! curl -sSL -o "${output_path}" "${download_url}"; then
         log_error "Failed to download ${file_path}"
         return 1
     fi
@@ -586,7 +580,7 @@ module_init_ct_system() {
     log_info "Downloading CT service and timer files..."
     
     # Download service file
-    if ! curl -fsSL -H "Authorization: token $GITHUB_TOKEN" -o "${CT_SERVICE}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.service"; then
+    if ! curl -fsSL -o "${CT_SERVICE}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.service"; then
         log_error "Failed to download CT service file"
         return 1
     fi
@@ -594,7 +588,7 @@ module_init_ct_system() {
     log_info "CT service file downloaded and installed at ${CT_SERVICE}"
     
     # Download timer file
-    if ! curl -fsSL -H "Authorization: token $GITHUB_TOKEN" -o "${CT_TIMER}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.timer"; then
+    if ! curl -fsSL -o "${CT_TIMER}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/ct.timer"; then
         log_error "Failed to download CT timer file"
         return 1
     fi
