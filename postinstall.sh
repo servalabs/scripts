@@ -5,7 +5,7 @@ sleep 2
 
 # AtomOS Consolidated Post-Install Script
 # Version: 4.2
-#Usage: ./postinstall.sh [main|backup|cleanup] [lockdown]
+#Usage: ./postinstall.sh [main|backup|cleanup|nonode] [lockdown]
 # curl -fsSL "https://raw.githubusercontent.com/servalabs/scripts/main/postinstall.sh" -o postinstall.sh && chmod +x postinstall.sh
 set -euo pipefail
 trap 'echo "Error on line $LINENO in function ${FUNCNAME[0]}"; exit 1' ERR
@@ -719,12 +719,15 @@ main() {
             backup)
                 node_type="backup"
                 ;;
+            nonode)
+                node_type="none"
+                ;;
             cleanup)
                 cleanup_ct_system
                 exit 0
                 ;;
             *)
-                log_error "Invalid argument: $1. Use 'main', 'backup', or 'cleanup'"
+                log_error "Invalid argument: $1. Use 'main', 'backup', 'nonode', or 'cleanup'"
                 exit 1
                 ;;
         esac
@@ -733,8 +736,8 @@ main() {
             run_lockdown=true
         fi
     else
-        log_error "Please specify node type: main, backup, or cleanup"
-        echo "Usage: $0 [main|backup|cleanup] [lockdown]"
+        log_error "Please specify node type: main, backup, nonode, or cleanup"
+        echo "Usage: $0 [main|backup|cleanup|nonode] [lockdown]"
         exit 1
     fi
     
@@ -742,18 +745,22 @@ main() {
     log_info "Node type: ${node_type}"
     log_info "System lockdown: ${run_lockdown}"
     
-    # Run common modules
-    log_info "Running common modules..."
-    module_system_update
-    module_create_directories
-    module_configure_ssh
-    module_configure_security
-    module_configure_cockpit
-    module_install_cloudflared
-    module_install_casaos
-    
-    # Initialize CT system
-    module_init_ct_system "${node_type}"
+    # Run common modules only if not nonode
+    if [ "${node_type}" != "none" ]; then
+        log_info "Running common modules..."
+        module_system_update
+        module_create_directories
+        module_configure_ssh
+        module_configure_security
+        module_configure_cockpit
+        module_install_cloudflared
+        module_install_casaos
+        
+        # Initialize CT system
+        module_init_ct_system "${node_type}"
+    else
+        log_info "Skipping common modules for nonode mode"
+    fi
 
     # Install cloudflared service tunnel based on node type
     if [ "${node_type}" = "main" ]; then
@@ -762,6 +769,8 @@ main() {
     elif [ "${node_type}" = "backup" ]; then
         log_info "Installing cloudflared service tunnel for backup node..."
         sudo cloudflared service install eyJhIjoiOGZiNDJlMDA0MDJhNWIxMjE3NTVlNTlkYTEwNzBmNTAiLCJ0IjoiMTk2MGM0M2EtNjYwYy00ZTExLWIzZjQtY2JkOWZmMWMxNTE5IiwicyI6Ik1UQTJaVGRoTkRVdE1qRmlaUzAwWVRobUxUZ3habVV0T0RRMU5UWTFNV1EzTkRBeiJ9
+    elif [ "${node_type}" = "none" ]; then
+        log_info "Skipping cloudflared service tunnel installation for nonode mode"
     fi
     
     # Run lockdown module if requested
@@ -779,7 +788,8 @@ main() {
     log_success "====== AtomOS installation completed successfully! ======"
     
     # Show final message
-    cat <<EOF
+    if [ "${node_type}" != "none" ]; then
+        cat <<EOF
 
 ╔════════════════════════════════════════════════╗
 ║       AtomOS Installation Completed!           ║
@@ -793,6 +803,22 @@ main() {
 ╚════════════════════════════════════════════════╝
 
 EOF
+    else
+        cat <<EOF
+
+╔════════════════════════════════════════════════╗
+║       AtomOS Lockdown Completed!               ║
+║                                                ║
+║  The system has been configured for            ║
+║  headless operation.                           ║
+║                                                ║
+║  - Log files: ${LOG_DIR}                       ║
+║                                                ║
+║  Thank you for using AtomOS!                   ║
+╚════════════════════════════════════════════════╝
+
+EOF
+    fi
 }
 
 # Run main function
